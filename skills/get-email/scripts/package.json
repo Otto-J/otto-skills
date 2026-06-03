@@ -1,0 +1,21 @@
+{
+  "name": "get-email-scripts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CLI helpers for the get-email Codex skill.",
+  "bin": {
+    "getEmail": "./fetch-mail.mjs",
+    "getEmailInitConfig": "./init-config.mjs"
+  },
+  "scripts": {
+    "check": "node --check fetch-mail.mjs && node --check init-config.mjs"
+  },
+  "dependencies": {
+    "imapflow": "^1.0.194",
+    "mailparser": "^3.9.0",
+    "turndown": "^7.2.4"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

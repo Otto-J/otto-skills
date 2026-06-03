@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tencent Cloud"
+  short_description: "Automate Tencent Cloud tasks, starting with DNSPod"
+  default_prompt: "Use $tencent-cloud to list or upsert DNSPod DNS records with DNSPOD_ID and DNSPOD_KEY."

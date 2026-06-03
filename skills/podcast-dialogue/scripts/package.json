@@ -1,0 +1,12 @@
+{
+  "name": "podcast-dialogue",
+  "version": "1.0.0",
+  "description": "Convert text content to podcast dialogue with TTS audio generation",
+  "type": "module",
+  "scripts": {
+    "generate": "node generate-podcast.mjs"
+  },
+  "dependencies": {},
+  "author": "",
+  "license": "MIT"
+}

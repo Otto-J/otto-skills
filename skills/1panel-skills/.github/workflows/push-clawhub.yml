@@ -1,0 +1,144 @@
+name: Publish to ClawHub
+
+on:
+  workflow_dispatch:
+    inputs:
+      site:
+        description: "ClawHub site URL"
+        required: true
+        default: "https://clawhub.ai"
+      version:
+        description: "SemVer version to publish. Must be greater than the currently published version."
+        required: true
+        default: "0.0.3"
+      slug:
+        description: "ClawHub skill slug"
+        required: true
+        default: "1panel-skills"
+      display_name:
+        description: "ClawHub display name"
+        required: true
+        default: "1panel-skills"
+      tags:
+        description: "Comma-separated ClawHub tags"
+        required: true
+        default: "latest"
+      changelog:
+        description: "Optional changelog text"
+        required: false
+        default: ""
+      owner:
+        description: "ClawHub publisher handle for the existing skill"
+        required: false
+        default: "1panel"
+      clawscan_note:
+        description: "Optional ClawScan note"
+        required: false
+        default: "Uses network access only to call the user-configured 1Panel API."
+
+jobs:
+  publish:
+    name: Publish skill
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build runtime files
+        run: npm run build
+
+      - name: Prepare ClawHub skill upload folder
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          UPLOAD_DIR="$RUNNER_TEMP/1panel-skills"
+          rm -rf "$UPLOAD_DIR"
+          mkdir -p "$UPLOAD_DIR"
+
+          rsync -a \
+            --include='SKILL.md' \
+            --include='README.md' \
+            --include='README.zh-CN.md' \
+            --include='LICENSE' \
+            --include='agents/***' \
+            --include='references/***' \
+            --include='scripts/***' \
+            --include='dist/' \
+            --include='dist/scripts/***' \
+            --exclude='*' \
+            ./ "$UPLOAD_DIR/"
+
+          if find "$UPLOAD_DIR" \( -name 'openclaw.plugin.json' -o -name 'package.json' -o -name 'plugin.js' -o -name 'plugin.ts' \) -print -quit | grep -q .; then
+            echo "Upload folder contains plugin/package metadata; refusing to publish as a skill." >&2
+            find "$UPLOAD_DIR" \( -name 'openclaw.plugin.json' -o -name 'package.json' -o -name 'plugin.js' -o -name 'plugin.ts' \) -print >&2
+            exit 1
+          fi
+
+          find "$UPLOAD_DIR" -maxdepth 4 -type f | sort
+
+      - name: Install ClawHub CLI
+        run: npm install -g clawhub
+
+      - name: Login to ClawHub
+        env:
+          CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
+          CLAWHUB_SITE_URL: ${{ inputs.site }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CLAWHUB_TOKEN:-}" ]; then
+            echo "CLAWHUB_TOKEN secret is required for a real publish." >&2
+            exit 1
+          fi
+
+          clawhub --site "$CLAWHUB_SITE_URL" --no-input login --token "$CLAWHUB_TOKEN"
+          clawhub --site "$CLAWHUB_SITE_URL" --no-input whoami
+
+      - name: Publish skill to ClawHub
+        shell: bash
+        env:
+          CLAWHUB_SITE_URL: ${{ inputs.site }}
+          VERSION: ${{ inputs.version }}
+          SLUG: ${{ inputs.slug }}
+          DISPLAY_NAME: ${{ inputs.display_name }}
+          TAGS: ${{ inputs.tags }}
+          CHANGELOG: ${{ inputs.changelog }}
+          OWNER: ${{ inputs.owner }}
+          CLAWSCAN_NOTE: ${{ inputs.clawscan_note }}
+        run: |
+          set -euo pipefail
+
+          UPLOAD_DIR="$RUNNER_TEMP/1panel-skills"
+          CMD=(
+            clawhub --site "$CLAWHUB_SITE_URL" --no-input skill publish "$UPLOAD_DIR"
+            --slug "$SLUG"
+            --name "$DISPLAY_NAME"
+            --version "$VERSION"
+            --tags "$TAGS"
+          )
+
+          if [ -n "$CHANGELOG" ]; then
+            CMD+=(--changelog "$CHANGELOG")
+          fi
+
+          if [ -n "$OWNER" ]; then
+            CMD+=(--owner "$OWNER")
+          fi
+
+          if [ -n "$CLAWSCAN_NOTE" ]; then
+            CMD+=(--clawscan-note "$CLAWSCAN_NOTE")
+          fi
+
+          "${CMD[@]}"

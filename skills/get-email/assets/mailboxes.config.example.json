@@ -1,0 +1,41 @@
+{
+  "defaults": {
+    "limit": 20,
+    "mailbox": "INBOX",
+    "maxContentChars": 2000,
+    "previewChars": 300,
+    "includeHtml": false,
+    "markSeen": false,
+    "action": "fetch",
+    "deleteMode": "preview",
+    "format": "preview",
+    "filters": {
+      "unseen": true,
+      "since": "",
+      "from": "",
+      "subject": "",
+      "query": ""
+    },
+    "out": ""
+  },
+  "accounts": [
+    {
+      "name": "personal",
+      "host": "imap.qq.com",
+      "port": 993,
+      "secure": true,
+      "user": "your_email@qq.com",
+      "passEnv": "QQ_MAIL_APP_PASSWORD",
+      "mailbox": "INBOX"
+    },
+    {
+      "name": "work",
+      "host": "imap.example.com",
+      "port": 993,
+      "secure": true,
+      "user": "you@example.com",
+      "passEnv": "WORK_MAIL_APP_PASSWORD",
+      "mailbox": "INBOX"
+    }
+  ]
+}

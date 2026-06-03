@@ -1,0 +1,4 @@
+interface:
+  display_name: "getEmail"
+  short_description: "Fetch and clean email from multiple IMAP accounts"
+  default_prompt: "Use $get-email to fetch recent email from configured IMAP accounts."
