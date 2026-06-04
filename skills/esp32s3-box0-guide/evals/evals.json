@@ -1,0 +1,20 @@
+{
+  "skill_name": "esp32s3-box0-guide",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我刚拿到 ATK-DNESP32S3-BOX0，想确认本机有没有 ESP-IDF 开发环境，并知道下一步怎么连接设备。",
+      "expected_output": "Uses the environment and device-detection stages, points to check-env.sh and detect-box0.sh, and explains ESP-IDF v6.0.1, esp32s3, serial port discovery, and ROM download mode."
+    },
+    {
+      "id": 2,
+      "prompt": "帮我用网页方式确认 BOX0 属于 ESP32-S3，最好能看到 Flash、MAC 和 USB 信息。",
+      "expected_output": "Uses the Web Serial validation stage, starts or references start-espinfo-demo.sh, instructs Chrome or Edge, and lists expected JSON fields including family, isEsp32S3, mac, flashId, flashSize, features, and usb."
+    },
+    {
+      "id": 3,
+      "prompt": "我要在 BOX0 上做一个最小自定义系统：开机显示文字和图片，按键切换，长按关机。",
+      "expected_output": "Uses the simple app example and hardware map, references lcd_demo main.c and xiaozhi config.h, gives button, LCD, power-hold GPIOs, and proposes build/flash/monitor validation."
+    }
+  ]
+}

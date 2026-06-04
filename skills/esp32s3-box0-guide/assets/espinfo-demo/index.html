@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ESP Web Serial Info Demo</title>
+  </head>
+  <body>
+    <main>
+      <h1>ESP Web Serial Info Demo</h1>
+      <p>
+        Chrome/Edge 中点击按钮选择串口设备。ESP32-S3 需要处于 ROM download
+        模式，常见方式是按住 BOOT 后复位。
+      </p>
+
+      <button id="readBtn">选择设备并读取信息</button>
+      <button id="disconnectBtn" disabled>断开</button>
+
+      <h2>状态</h2>
+      <pre id="status">等待操作</pre>
+
+      <h2>设备信息</h2>
+      <pre id="result">{}</pre>
+
+      <h2>日志</h2>
+      <pre id="log"></pre>
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
