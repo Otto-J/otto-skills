@@ -32,8 +32,9 @@ $SKILL_DIR/scripts/detect-box0.sh /dev/cu.usbmodemXXXX
 
 ## Read Chip Identity
 
+With ESP-IDF activated:
+
 ```bash
-source ~/.espressif/tools/activate_idf_v6.0.1.sh
 python -m esptool --chip esp32s3 -p /dev/cu.usbmodemXXXX chip_id
 python -m esptool --chip esp32s3 -p /dev/cu.usbmodemXXXX flash_id
 ```

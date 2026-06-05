@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="${LCD_DEMO:-${HOME}/esp/lcd_demo}"
-IDF_ACTIVATE="${IDF_ACTIVATE:-${HOME}/.espressif/tools/activate_idf_v6.0.1.sh}"
+SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$SKILL_DIR/scripts/_resolve.sh"
+
+ACTIVATE="$(find_idf_activate)" || { printf 'ERROR: ESP-IDF not found. Run check-env.sh for details.\n' >&2; exit 1; }
+ROOT_DIR="$(find_lcd_demo)" || { printf 'ERROR: lcd_demo not found. Set LCD_DEMO=/path/to/lcd_demo or place it at ~/esp/lcd_demo.\n' >&2; exit 1; }
 PORT_ARG="${1:-${PORT:-}}"
 
 find_port() {
@@ -31,5 +34,5 @@ if [[ -z "$DEVICE_PORT" ]]; then
 fi
 
 cd "$ROOT_DIR"
-IDF_ACTIVATE="$IDF_ACTIVATE" DEVICE_PORT="$DEVICE_PORT" \
-  zsh -lc 'source "$IDF_ACTIVATE" >/dev/null && idf.py set-target esp32s3 && idf.py build && idf.py -p "$DEVICE_PORT" flash monitor'
+ACTIVATE="$ACTIVATE" DEVICE_PORT="$DEVICE_PORT" \
+  zsh -lc 'source "$ACTIVATE" >/dev/null 2>&1 && idf.py set-target esp32s3 && idf.py build && idf.py -p "$DEVICE_PORT" flash monitor'

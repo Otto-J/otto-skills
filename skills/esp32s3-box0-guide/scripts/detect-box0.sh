@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IDF_ACTIVATE="${IDF_ACTIVATE:-${HOME}/.espressif/tools/activate_idf_v6.0.1.sh}"
+SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$SKILL_DIR/scripts/_resolve.sh"
+
+ACTIVATE="$(find_idf_activate)" || { printf 'ERROR: ESP-IDF not found. Run check-env.sh for details.\n' >&2; exit 1; }
 PORT="${1:-${PORT:-}}"
 
 find_port() {
@@ -38,9 +41,9 @@ fi
 printf '\n## Selected port\n%s\n' "$DEVICE_PORT"
 
 printf '\n## chip_id\n'
-IDF_ACTIVATE="$IDF_ACTIVATE" DEVICE_PORT="$DEVICE_PORT" \
-  zsh -lc 'source "$IDF_ACTIVATE" >/dev/null && python -m esptool --chip esp32s3 -p "$DEVICE_PORT" chip_id'
+ACTIVATE="$ACTIVATE" DEVICE_PORT="$DEVICE_PORT" \
+  zsh -lc 'source "$ACTIVATE" >/dev/null 2>&1 && python -m esptool --chip esp32s3 -p "$DEVICE_PORT" chip_id'
 
 printf '\n## flash_id\n'
-IDF_ACTIVATE="$IDF_ACTIVATE" DEVICE_PORT="$DEVICE_PORT" \
-  zsh -lc 'source "$IDF_ACTIVATE" >/dev/null && python -m esptool --chip esp32s3 -p "$DEVICE_PORT" flash_id'
+ACTIVATE="$ACTIVATE" DEVICE_PORT="$DEVICE_PORT" \
+  zsh -lc 'source "$ACTIVATE" >/dev/null 2>&1 && python -m esptool --chip esp32s3 -p "$DEVICE_PORT" flash_id'

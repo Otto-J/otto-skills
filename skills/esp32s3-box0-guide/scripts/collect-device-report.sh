@@ -2,7 +2,9 @@
 set -euo pipefail
 
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OUT_DIR="${OUT_DIR:-$PWD/esp32s3-box0-guideice-report-$(date +%Y%m%d-%H%M%S)}"
+source "$SKILL_DIR/scripts/_resolve.sh"
+
+OUT_DIR="${OUT_DIR:-$PWD/box0-device-report-$(date +%Y%m%d-%H%M%S)}"
 PORT_ARG="${1:-${PORT:-}}"
 
 mkdir -p "$OUT_DIR"
@@ -14,12 +16,11 @@ else
   printf 'device detection: FAILED\n' > "$OUT_DIR/summary.txt"
 fi
 
-if [[ -f ${HOME}/esp/lcd_demo/build/flasher_args.json ]]; then
-  cp ${HOME}/esp/lcd_demo/build/flasher_args.json "$OUT_DIR/lcd-demo-flasher_args.json"
-fi
-
-if [[ -f ${HOME}/esp/lcd_demo/build/project_description.json ]]; then
-  cp ${HOME}/esp/lcd_demo/build/project_description.json "$OUT_DIR/lcd-demo-project_description.json"
+# Optional: copy lcd_demo build info if available
+LCD_FOUND="$(find_lcd_demo 2>/dev/null || true)"
+if [[ -n "$LCD_FOUND" ]]; then
+  [[ -f "$LCD_FOUND/build/flasher_args.json" ]] && cp "$LCD_FOUND/build/flasher_args.json" "$OUT_DIR/lcd-demo-flasher_args.json"
+  [[ -f "$LCD_FOUND/build/project_description.json" ]] && cp "$LCD_FOUND/build/project_description.json" "$OUT_DIR/lcd-demo-project_description.json"
 fi
 
 cat >> "$OUT_DIR/summary.txt" <<EOF
@@ -31,4 +32,3 @@ web_serial_manual_step:
 EOF
 
 printf '%s\n' "$OUT_DIR"
-

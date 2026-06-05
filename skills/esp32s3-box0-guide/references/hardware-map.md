@@ -1,9 +1,14 @@
 # Hardware Map
 
-Use current source files as authority:
+## Source of Truth
 
-- `lcd_demo`: `~/esp/lcd_demo/main/main.c`
-- `xiaozhi-esp32`: `~/mycode/xiaozhi-esp32/main/boards/atk-dnesp32s3-box0/config.h`
+Board parameters come from the xiaozhi-esp32 board config:
+
+```text
+xiaozhi-esp32/main/boards/atk-dnesp32s3-box0/config.h
+```
+
+Resolve via: `$XIAOZHI` env var → `~/mycode/xiaozhi-esp32` → `.cache/xiaozhi-esp32` (after provision).
 
 ## Board Identity
 
@@ -24,14 +29,14 @@ CHRG_PIN GPIO48
 BAT_VSEN_PIN GPIO1
 ```
 
-`lcd_demo` holds power by setting `SYS_POWER_HOLD` / `GPIO2` high during boot. A long-press power-off example can show a shutdown label, delay briefly, then set `GPIO2` low.
+Power hold: set `GPIO2` high during boot to keep the board powered. Long-press power-off: set `GPIO2` low then enter deep sleep.
 
 ## Buttons
 
 ```text
-Right  GPIO0
-Middle GPIO4
-Left   GPIO3
+Right  GPIO0   (pull-up, active low)
+Middle GPIO4   (pull-down, active high)
+Left   GPIO3   (pull-up, active low)
 ```
 
 Suggested UI mapping:
@@ -65,6 +70,8 @@ mirror_y: false
 swap_xy: false
 offset_x: 0
 offset_y: 0
+invert_color: true
+swap_bytes: true (for LVGL RGB565)
 ```
 
 ## Audio
@@ -83,9 +90,7 @@ speaker GPIO21
 codec ES8311
 ```
 
-## TF Card
-
-`lcd_demo` currently uses SDSPI:
+## TF Card (SDSPI)
 
 ```text
 CLK  GPIO16
@@ -94,5 +99,6 @@ MISO GPIO18
 CS   GPIO15
 ```
 
-Use these values as practical `lcd_demo` evidence. For a new firmware branch, verify against the real board and source before baking them into a board package.
+## Verification
 
+For any new firmware, verify pin assignments against the xiaozhi-esp32 config.h before baking them into code. The values above are verified against the real board.

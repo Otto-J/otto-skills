@@ -1,13 +1,13 @@
 # Simple App Example
 
-Use this as the first custom development milestone after baseline flashing.
+Use this as the first custom development milestone after verifying the environment.
 
 ## Goal
 
 Create a minimal BOX0 app that:
 
 - Boots into a custom screen.
-- Shows an icon or bitmap plus text.
+- Shows text on the 240×240 LCD.
 - Uses left/right/middle buttons.
 - Uses middle long-press for power-off.
 - Prints serial logs for each state transition.
@@ -26,20 +26,20 @@ Button behavior:
 Left click: previous message
 Right click: next message
 Middle click: show selected action
-Middle long press: show "Power Off" and release SYS_POW_PIN / GPIO2
+Middle long press: show "Power Off" and release GPIO2
 ```
 
 ## Development Approach
 
-Start from `lcd_demo` and keep the working hardware initialization:
+Start from the baseline firmware pattern (see `references/baseline-firmware-pattern.md`):
 
-- power hold setup
-- LCD SPI panel setup
-- LVGL setup
-- backlight PWM setup
-- button debounce and long-press polling
+- power hold setup (GPIO2)
+- LCD SPI panel setup (ST7789, 240×240)
+- LVGL setup (lvgl_port)
+- backlight PWM setup (GPIO42)
+- button debounce and long-press polling (GPIO3/4/0)
 
-Then simplify the menu state into a small app state:
+Then add a simple app state:
 
 ```c
 typedef enum {
@@ -53,20 +53,18 @@ Use LVGL labels for the first version. Add bitmap/image display after the text p
 
 ## Validation
 
-After flashing, collect:
+After flashing, verify:
 
 ```text
-serial boot log
-photo of screen
-left/right/middle click behavior
-middle long-press shutdown behavior
+- Serial boot log shows "boot menu ready" or similar
+- Screen displays text UI
+- Left/right clicks cycle content
+- Middle long-press triggers shutdown (screen goes dark, device powers off)
 ```
 
-Run:
+Optionally collect a device report:
 
 ```bash
 SKILL_DIR=/path/to/esp32s3-box0-guide
 $SKILL_DIR/scripts/collect-device-report.sh /dev/cu.usbmodemXXXX
 ```
-
-Attach the report to future debugging work so the next agent has exact environment and device facts.

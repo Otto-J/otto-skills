@@ -1,6 +1,6 @@
 # Web Serial Validation
 
-Use the local Web Serial page for manual hardware inspection during testing. It complements command-line detection by showing chip family, MAC, Flash, features, and USB bridge information in a browser.
+Use the Web Serial page for manual hardware inspection during testing. It shows chip family, MAC, Flash, features, and USB bridge information in a browser.
 
 ## Start
 
@@ -16,6 +16,13 @@ http://127.0.0.1:5173
 ```
 
 Use Chrome or Edge. Web Serial requires HTTPS or `localhost` / `127.0.0.1`.
+
+## Source Resolution
+
+The script uses:
+1. `$ESPINFO_SOURCE` environment variable (if set)
+2. `~/mycode/espinfo-demo` (if exists)
+3. Bundled `assets/espinfo-demo/` (always available)
 
 ## Manual Check
 
@@ -36,5 +43,3 @@ flashSize: present
 features: present
 usb: present
 ```
-
-The source page is copied into `assets/espinfo-demo/` so this skill can be used as a portable package. The current development source remains `~/mycode/espinfo-demo`.

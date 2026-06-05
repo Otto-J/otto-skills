@@ -9,23 +9,43 @@ Use this skill to help a BOX0 user move from a connected device to an independen
 
 ## Primary Workflow
 
-1. Check the host development environment.
-2. Detect the connected BOX0 through command-line tools.
-3. Start the local Web Serial verifier for manual hardware inspection.
-4. Build and flash the baseline `lcd_demo` firmware.
-5. Guide a minimal custom system: boot screen, image/text display, button behavior, long-press power handling.
-6. Use `lcd_demo` and `xiaozhi-esp32` as source references for board parameters, architecture, and hardware practice.
+1. Check the host development environment (ESP-IDF installed and activated).
+2. Provision reference sources if needed (`scripts/provision-refs.sh`).
+3. Detect the connected BOX0 through command-line tools.
+4. Start the local Web Serial verifier for manual hardware inspection.
+5. Build and flash a baseline firmware.
+6. Guide a minimal custom system: boot screen, image/text display, button behavior, long-press power handling.
 
-## Source Roots
+## Source Resolution
 
-Use these local paths first when they exist:
+The skill resolves code references in this priority order:
 
-- BOX0 hardware test firmware: `~/esp/lcd_demo`
-- XiaoZhi ESP32 firmware: `~/mycode/xiaozhi-esp32`
-- Web Serial device info demo: `~/mycode/espinfo-demo`
-- ESP-IDF: `~/.espressif/v6.0.1/esp-idf`
-- ESP-IDF activation script: `~/.espressif/tools/activate_idf_v6.0.1.sh`
-- Obsidian notes: `~/mynote/obsidian-note`
+1. **Local project** — user's own working copy (if it exists at the conventional path or a custom env var).
+2. **Skill cache** — shallow clones under `$SKILL_DIR/.cache/`, provisioned by `scripts/provision-refs.sh`.
+3. **GitHub remote** — read files directly via `mcp__zread` tools when only a few files are needed.
+
+### Infrastructure (must be installed to build)
+
+ESP-IDF is the build framework. Without it, no ESP32 project compiles.
+
+Detection order: `$IDF_PATH` → common install paths (`~/.espressif/*/esp-idf`, `~/esp/esp-idf`).
+If missing: guide the user through official installation, do NOT attempt to clone as a substitute.
+
+### Reference repositories (read-only knowledge)
+
+| Repository | Purpose | Provision |
+|---|---|---|
+| [xiaozhi-esp32](https://github.com/78/xiaozhi-esp32) | Board abstraction model, BOX0 config.h, release scripts | `git clone --depth 1` into `.cache/` |
+| [esp-idf](https://github.com/espressif/esp-idf) | API headers, examples, component source (read-only) | Optional `git clone --depth 1 --no-recurse-submodules` into `.cache/` |
+
+### Optional local projects
+
+These are the skill author's private repos. When present they are used first; when absent the skill works without them.
+
+| Env var | Default path | Description |
+|---|---|---|
+| `LCD_DEMO` | `~/esp/lcd_demo` | BOX0 hardware test firmware (private) |
+| `ESPINFO_SOURCE` | `~/mycode/espinfo-demo` | Web Serial verifier source (falls back to `assets/espinfo-demo/`) |
 
 ## Stage Selection
 
@@ -36,9 +56,10 @@ Read only the reference needed for the current user request:
 - Web Serial verification: `references/web-serial-validation.md`
 - Baseline build and flashing: `references/flash-and-monitor.md`
 - BOX0 GPIO, display, audio, power, TF card parameters: `references/hardware-map.md`
-- `lcd_demo` architecture and firmware practice: `references/lcd-demo-architecture.md`
+- BOX0 baseline firmware architecture and patterns: `references/baseline-firmware-pattern.md`
 - `xiaozhi-esp32` board porting model: `references/xiaozhi-board-porting.md`
 - Minimal custom app example: `references/simple-app-example.md`
+- CI/CD with GitHub Actions: `references/github-actions-build.md`
 - Common failures and recovery: `references/troubleshooting.md`
 
 ## Fast Commands
@@ -48,6 +69,7 @@ Run from any directory:
 ```bash
 SKILL_DIR=/path/to/esp32s3-box0-guide
 $SKILL_DIR/scripts/check-env.sh
+$SKILL_DIR/scripts/provision-refs.sh
 $SKILL_DIR/scripts/detect-box0.sh
 $SKILL_DIR/scripts/start-espinfo-demo.sh
 $SKILL_DIR/scripts/flash-lcd-demo.sh /dev/cu.usbmodemXXXX
@@ -64,13 +86,14 @@ The target device is ATK-DNESP32S3-BOX0:
 - Buttons: left `GPIO3`, middle `GPIO4`, right `GPIO0`
 - Power hold: `GPIO2`
 - LCD pins: SCLK `GPIO39`, MOSI `GPIO40`, DC `GPIO38`, CS `GPIO41`, backlight `GPIO42`
-- `lcd_demo` flash map: bootloader `0x0`, partition table `0x8000`, app `0x10000`
+- Standard flash map: bootloader `0x0`, partition table `0x8000`, app `0x10000`
 
 ## Working Principles
 
 - Prefer current source files and build artifacts over remembered values.
-- Treat `build/flasher_args.json` as the flash-map source for `lcd_demo`.
-- Treat `main/boards/atk-dnesp32s3-box0/config.h` as the board-parameter source for `xiaozhi-esp32`.
+- Use `build/flasher_args.json` as the flash-map truth for any project.
+- Use `main/boards/atk-dnesp32s3-box0/config.h` in xiaozhi-esp32 as the board-parameter source.
 - Keep the first successful path small: environment check, device detect, Web Serial identity, baseline flash, monitor logs.
 - Use the Web Serial verifier for manual inspection during testing and command-line scripts for repeatable automation.
-- For network download or Docker registry conflicts, run the command through the user's `proxy` shell alias.
+- Local development uses native ESP-IDF; Docker is only for GitHub Actions CI.
+- All scripts use environment variables with auto-detection fallbacks — no path is assumed to exist.
