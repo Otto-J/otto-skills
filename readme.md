@@ -13,6 +13,7 @@
 - `skills/oss-manager/`: 阿里云 OSS 上传、删除、列表和 URL 生成。
 - `skills/tencent-cloud/`: 腾讯云 API 自动化辅助。
 - `skills/esp32s3-box0-guide/`: ESP32-S3 BOX0 学习、刷机和验证流程。
+- `skills/codex-history-repair/`: Codex sidebar/resume 历史丢失时，修复 rollout provider metadata、SQLite thread 索引和全局状态。
 
 索引规则：
 
