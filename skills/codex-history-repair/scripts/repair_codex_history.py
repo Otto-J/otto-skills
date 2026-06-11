@@ -78,6 +78,14 @@ def compact(value: Any, limit: int = 500) -> str:
     return " ".join(str(value or "").split())[:limit]
 
 
+def text_value(value: Any, default: str = "") -> str:
+    if value is None:
+        return default
+    if isinstance(value, str):
+        return value or default
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
 def title_from_user(message: str, thread_id: str) -> str:
     title = compact(message, 120)
     if title.startswith("/goal "):
@@ -177,9 +185,9 @@ def extract_thread(path: Path, codex_home: Path) -> dict[str, Any] | None:
         "rel_path": str(path.relative_to(codex_home)),
         "created_at": created_at,
         "updated_at": updated_at,
-        "source": first_meta.get("source") or "unknown",
-        "model_provider": first_meta.get("model_provider") or "",
-        "cwd": first_meta.get("cwd") or str(Path.home()),
+        "source": text_value(first_meta.get("source"), "unknown"),
+        "model_provider": text_value(first_meta.get("model_provider"), ""),
+        "cwd": text_value(first_meta.get("cwd"), str(Path.home())),
         "title": title_from_user(first_user, thread_id),
         "sandbox_policy": sandbox,
         "approval_mode": approval,
@@ -190,17 +198,17 @@ def extract_thread(path: Path, codex_home: Path) -> dict[str, Any] | None:
         "git_sha": git.get("commit_hash"),
         "git_branch": git.get("branch"),
         "git_origin_url": git.get("repository_url"),
-        "cli_version": first_meta.get("cli_version") or "",
+        "cli_version": text_value(first_meta.get("cli_version"), ""),
         "first_user_message": compact(first_user, 4000),
         "agent_nickname": None,
         "agent_role": None,
         "memory_mode": "enabled",
-        "model": model,
-        "reasoning_effort": reasoning,
+        "model": text_value(model) or None,
+        "reasoning_effort": text_value(reasoning) or None,
         "agent_path": None,
         "created_at_ms": created_at_ms,
         "updated_at_ms": updated_at_ms,
-        "thread_source": thread_source,
+        "thread_source": text_value(thread_source) or None,
         "preview": compact(preview or first_user, 500),
     }
 
