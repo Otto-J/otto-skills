@@ -1,0 +1,4 @@
+interface:
+  display_name: "Chenhui"
+  short_description: "Write daily Git and PR handoff reports."
+  default_prompt: "整理昨天完成的事情、没完成的事情，以及今天需要跟进的事项。"
