@@ -19,6 +19,7 @@ Default rhythm:
 6. **Technical details**: Code paths, commands, request shapes, runtime observations, and pitfalls.
 7. **Current judgment**: What the result means and what the next concrete step should be.
 8. **Visual pass**: Decide whether the article needs additional Mermaid or Xiaohei-style visuals, then provide visual slots or prompts.
+9. **De-AI flavor pass**: After the draft is written to a file, run the tell-finder script, then rewrite every flagged paragraph. See the "Post-Write De-AI Flavor Pass" section.
 
 Keep the article grounded in what was actually tested. Mark technical facts as docs, source code, runtime behavior, logs, screenshots, or inference.
 
@@ -27,14 +28,14 @@ Default reader: a technical peer, product builder, or future self who wants the 
 ## Writing Taste
 
 - Start like a person explaining what happened.
-- The first paragraph should use an observer-style preface: "本文描述了 <场景> 下，<作者/团队/使用者> 如何完成 <经历/验证/系统搭建>。它适合 <阶段/角色> 的读者阅读。"
+- The first paragraph is an observer-style preface: 2-3 sentences covering the scenario, what this piece describes, and who should read it. Write it fresh each time — never a fill-in template. Avoid formulaic openers like "本文描述了…" or "在…的背景下".
 - Put the first illustration slot after the preface and before the body when the article has a clear visual metaphor.
 - Use short paragraphs and lists.
 - Use tables only when the user asks for a table, or when rows and columns are the clearest representation of data.
 - Keep the default article compact. A normal article should stay around 1,000-1,800 Chinese characters before the technical appendix.
 - Keep each section focused on one job.
 - Use direct claims. State distinctions as parallel positive facts.
-- Preserve exploratory voice: "我一开始想确认...", "我实际跑了一遍...", "这里的边界变清楚了...".
+- Write in first person with an exploratory tone. Vary how you open and close paragraphs — do not recycle fixed phrases. Avoid overused tells: "值得一提的是", "总而言之", "不仅…而且…", "众所周知".
 - Give enough background for the reader to enter the story quickly.
 - Assume the reader can follow technical context once the practical problem is clear.
 - Use lists for phases, observations, risks, decisions, and next steps.
@@ -42,61 +43,53 @@ Default reader: a technical peer, product builder, or future self who wants the 
 
 ## Standard Article Structure
 
-Use this shape as the default. Adjust section names to fit the article.
+Use this shape as the default. Section order is fixed — background, then the result, then the details in between — because it makes the piece easy to share and follow. Headings are not fixed: each section below lists the job it must do and a heading or two you can use or replace. Pick wording that fits the article; do not reuse the same headings verbatim across articles.
 
-0. **前言**
-   - Use a calm observer voice.
-   - In 2-3 sentences, state the scenario, the experience described, and the suitable reader.
-   - Avoid overexplaining background here.
+**前言**
+- Job: 2-3 sentences — the scenario, what this describes, who it's for. Calm observer voice, no over-explaining.
+- Headings you can use or replace: 前言 / 写在前面
 
-1. **正文前配图**
-   - Add one Xiaohei-style illustration slot before the body when it helps the reader enter the story.
-   - The lead illustration should express the article's main scene, tension, or workflow state.
-   - Include either a short visual note or a full Xiaohei prompt according to the user's request.
+**正文前配图**
+- Job: one lead image that helps the reader enter the story, expressing the main scene, tension, or workflow state.
+- Emit it as an inline image-prompt comment (see "Inline Image-Prompt Comments"). Readers do not see the comment; post-processing resolves it later.
 
-2. **我为什么要试这个**
-   - Tell the short story.
-   - Explain the real workflow or pain point.
-   - Name the one thing the experiment needed to confirm.
+**背景**
+- Job: the short story — the real workflow or pain point, and the one thing the experiment needed to confirm.
+- Headings you can use or replace: 我为什么要试这个 / 起因 / 这件事的来由
 
-3. **我最后跑出了什么**
-   - Describe the working result in plain language.
-   - Use a short list for what works, what is partial, and what remains unverified.
-   - Include only the strongest evidence: one log line, one screenshot, one command, one file path, or one behavior.
+**产物**
+- Job: the working result in plain language. A short list of what works / what is partial / what is unverified, plus only the strongest single piece of evidence (one log line, screenshot, command, file path, or behavior).
+- Headings you can use or replace: 我最后跑出了什么 / 结果 / 跑通的东西
 
-4. **我是怎么把它做出来的**
-   - Explain the solution path.
-   - Use a narrative sequence: first did X, then added Y, then fixed Z.
-   - Keep this section about decisions and tradeoffs.
+**做法路径**
+- Job: the solution path as a sequence (did X, added Y, fixed Z), focused on decisions and tradeoffs.
+- Headings you can use or replace: 我是怎么把它做出来的 / 实现路径
 
-5. **这个系统现在长什么样**
-   - Explain architecture and boundaries.
-   - Prefer Mermaid for architecture and sequence.
-   - Use lists for module responsibilities.
+**系统长相**
+- Job: architecture and boundaries. Prefer Mermaid; use lists for module responsibilities.
+- Headings you can use or replace: 这个系统现在长什么样 / 架构
 
-6. **这次最关键的判断**
-   - Pick one central insight, pitfall, or boundary.
-   - Explain why it matters in real use.
-   - Connect the judgment to evidence from the experiment.
+**关键判断**
+- Job: one central insight, pitfall, or boundary — why it matters, tied to evidence from the experiment.
+- Headings you can use or replace: 这次最关键的判断 / 一个判断
 
-7. **技术细节和复现线索**
-   - Put implementation details here.
-   - Include small code snippets, commands, request/response shapes, config examples, or repo paths.
-   - End with the next concrete verification step.
+**技术细节**
+- Job: implementation details — small snippets, commands, request/response shapes, config, repo paths. End with the next concrete verification step.
+- Headings you can use or replace: 技术细节和复现线索 / 复现线索
 
-8. **补充配图建议**
-   - Treat visuals as a separate pass after the article draft.
-   - For normal drafts, output a short visual plan when visuals help: 0-2 Mermaid diagrams or Xiaohei-style illustrations.
-   - If the user asks to generate images, produce the Xiaohei prompts or call the image tool according to the environment.
+**配图收尾**
+- Job: a separate pass after the draft. Default output is inline image-prompt comments (see "Inline Image-Prompt Comments") plus Mermaid code blocks in the body — no separate end-of-article plan unless asked. A normal draft carries 0-2 Mermaid/Xiaohei visuals total.
 
 ## Compact Outline Template
 
+A ready-to-use skeleton. The headings below are starter labels — rename them to fit the article (see Standard Article Structure for each section's job).
+
 ```markdown
-# 标题：我用 <实验> 跑通了 <能力>，边界在 <关键问题>
+# 标题（具体、带主语、带边界；自拟，不套模板）
 
 ## 前言
 
-## 正文前配图
+<!-- 正文前配图：image-prompt comment goes here inline -->
 
 ## 我为什么要试这个
 
@@ -109,19 +102,16 @@ Use this shape as the default. Adjust section names to fit the article.
 ## 这次最关键的判断
 
 ## 技术细节和复现线索
-
-## 补充配图建议
 ```
 
 ## Title Patterns
 
-Prefer titles that sound like a real field note:
+Titles should read like a field note: concrete, with a subject and a boundary. Do not treat the examples below as fill-in templates — write the title fresh to fit the article.
 
-- `我用 <实验> 跑通了 <能力>，边界在 <问题>`
-- `<技术> 这次真正验证清楚的是 <判断>`
-- `从一个具体问题出发，我把 <能力> 做成了 <结果>`
-- `我试了一遍 <技术>，现在能确定 <结论>`
-- `<工具/API/产品> 能用到哪一步，我用一个小实验确认了`
+Examples (for tone only, free to replace):
+
+- 我用 X 跑通了 Y，边界在 Z
+- X 这次真正验证清楚的是 Z
 
 ## Evidence Rules
 
@@ -185,11 +175,48 @@ Use:
 
 Output behavior:
 
-- When drafting a full article, include **正文前配图** after the preface.
-- When drafting a full article, include a short **配图建议** section at the end.
-- When drafting a compact post, include at most one visual suggestion.
-- When the user asks for "配图", "插图", "小黑图", or "生成图片", produce the shot list or image prompt explicitly.
-- When the article already contains a Mermaid diagram in the body, the visual pass can say which section it supports and whether a Xiaohei illustration is still useful.
+- Emit image prompts as **inline HTML comments at the position where the image belongs** (see "Inline Image-Prompt Comments"), not as a separate shot-list section at the end. The comment is invisible to readers; a later post-processing pass reads each comment, calls an image generator, and replaces it with the rendered image.
+- When drafting a full article, place one lead-image comment right after the preface.
+- When drafting a compact post, emit at most one image-prompt comment.
+- Mermaid diagrams are still emitted as normal fenced ` ```mermaid ` code blocks where they belong — no comment needed.
+- When the user asks for "配图", "插图", "小黑图", or "生成图片", produce the inline comments. If the user explicitly wants a visible plan (not hidden in comments), fall back to a short shot list.
+
+## Inline Image-Prompt Comments
+
+By default, image prompts are written into the article as HTML comments at the exact position where the image belongs. This keeps the rendered article clean (readers see nothing) while leaving a machine-readable marker that a post-processing step can resolve into a real image.
+
+### Format
+
+```markdown
+<!-- 图片提示词
+ALT: <一句话：这张图是什么 / 在文章里承担什么>
+PROMPT:
+<可直接喂给文生图服务的完整 prompt，可多行；到 --> 结束>
+-->
+```
+
+Rules:
+
+- The comment block lives **where the image should be inserted**. Position is implicit — do not add a separate "放置位置" field.
+- `ALT:` is a single line. It doubles as the image's alt text after resolution.
+- `PROMPT:` can span many lines; everything until the closing `-->` is the prompt body. For 小黑 illustrations, fill in the single-image prompt template below into this block.
+- One comment = one image. Do not bundle several images in one comment.
+- Keep `图片提示词` as the literal prefix so the post-processor can find every block with one regex: `/<!--\s*图片提示词\s*\n([\s\S]*?)-->/g`.
+
+### What a post-processor will do
+
+For each matched block: parse `ALT:` and `PROMPT:`, call the configured image generator with the prompt, then replace the whole comment with `![ALT](<generated-url>)` (or insert the image after it). The skill's job ends at emitting well-formed comments; generation is external.
+
+### Example
+
+```markdown
+<!-- 图片提示词
+ALT: 小黑站在链路终点核对结果
+PROMPT:
+Generate one standalone 16:9 horizontal Chinese article illustration.
+... (filled single-image template) ...
+-->
+```
 
 ## Xiaohei-Style Article Illustration Rules
 
@@ -222,17 +249,17 @@ Color use:
 - Blue: secondary note, system state, assistant/AI feedback, background explanation.
 - Gray: optional weak structure, inactive modules, and secondary boundaries.
 
-Shot list format:
+Shot list format (use as a thinking aid while deciding a shot; the canonical output is the inline comment above, not this list):
 
 ```markdown
 ### 配图 <序号>：<主题>
-- 放置位置：<放在哪个段落后>
 - 核心意思：<这张图要帮读者理解什么>
 - 结构类型：<Workflow / 系统局部 / 前后对比 / 角色状态 / 概念隐喻 / 方法分层 / 地图路线 / 小漫画分镜>
 - 小黑动作：<小黑正在做的核心动作>
 - 建议元素：<3-5 个画面物件>
 - 中文标注：<3-6 个短词，每个 2-8 个字>
 ```
+(放置位置 is decided by where you drop the inline comment, so it is no longer a field here.)
 
 Single-image prompt template:
 
@@ -279,7 +306,39 @@ QA checklist:
 - The image feels like a sparse hand-drawn product sketch.
 - The image uses a fresh metaphor for the article.
 
-## Before Writing
+## Post-Write De-AI Flavor Pass
+
+AI-written Chinese text leans on a few crutch patterns that give it away. The two most common are the em dash `——` (used to tack on a clause) and the `不是…而是…` construction (used to draw a contrast). Run this pass once the article is written to a file. Do not skip it.
+
+### 1. Scan
+
+Run the tell-finder script bundled with this skill on the finished article:
+
+```bash
+node <skill-dir>/scripts/find-ai-tells.mjs <article.md>
+node <skill-dir>/scripts/find-ai-tells.mjs <article.md> --pretty   # readable
+```
+
+It returns a JSON array (stdout). Each entry has `paragraphIndex`, `matches` (which of `——` / `而是` it hit), the raw `paragraph`, plus `prev` / `next` for context. The summary line goes to stderr so the JSON stays clean.
+
+The script lives next to this SKILL.md under `scripts/find-ai-tells.mjs`. To add more tells later (e.g. `总而言之`, `值得一提的是`, `不仅…而且…`), extend the `TELLS` map in that file.
+
+### 2. Rewrite each flagged paragraph
+
+For every hit, rewrite the paragraph using `prev` and `next` as surrounding context. Rules:
+
+- Remove every `——`. Do not just delete the dash — restructure the sentence so it reads naturally without it (split into two sentences, use a comma or period, or fold the clause in).
+- Remove the `不是…而是…` construction. State the positive claim directly; if a contrast is genuinely needed, use `实际上` / `真正的` sparingly, or two plain sentences.
+- Keep the paragraph's meaning, evidence anchors (file paths, commands, log lines), and exploratory voice intact. Only the phrasing changes.
+- Do not introduce new tells while rewriting.
+
+### 3. Write back
+
+Replace the flagged paragraphs in the article with the rewritten versions. After writing back, re-run the scan to confirm zero hits. If any remain, rewrite again.
+
+Only the scan step is automated; the rewrite is your judgment, not a mechanical deletion.
+
+
 
 If the key insight is unclear, propose 2-3 possible angles and recommend one before writing the full article.
 
