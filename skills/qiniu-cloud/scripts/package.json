@@ -1,0 +1,11 @@
+{
+  "name": "qiniu-cloud-skill-scripts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "inventory": "node qiniu-inventory.mjs"
+  },
+  "dependencies": {
+    "qiniu": "7.14.0"
+  }
+}
