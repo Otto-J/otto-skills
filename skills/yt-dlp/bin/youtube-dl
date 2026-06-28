@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+# youtube-dl — yt-dlp wrapper with YouTube defaults baked in.
+#
+# Defaults for YouTube URLs:
+#   - Edge browser cookies (--cookies-from-browser edge)
+#   - node as JS runtime (--js-runtimes node) to solve YouTube n challenge
+#   - Audio extraction to MP3 at best quality
+#   - Subtitles: manual + auto, Chinese and English
+#
+# Usage:
+#   youtube-dl "https://www.youtube.com/watch?v=XXXX"
+#   youtube-dl --video "https://..."          # download video+audio instead of audio only
+#   youtube-dl --no-subs "https://..."         # skip subtitles
+#   youtube-dl --list-formats "https://..."   # list available formats
+#   youtube-dl --extra "-f 140" "https://..."  # pass extra yt-dlp args
+#
+# Any additional args before the URL are passed through to yt-dlp.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+YTDLP="$SCRIPT_DIR/yt-dlp"
+
+if [ ! -x "$YTDLP" ]; then
+  YTDLP="$(command -v yt-dlp 2>/dev/null || true)"
+fi
+if [ -z "$YTDLP" ]; then
+  echo "ERROR: yt-dlp binary not found." >&2
+  exit 1
+fi
+
+NODE_BIN="$(command -v node 2>/dev/null || true)"
+
+# --- defaults ---
+MODE="audio"        # audio | video
+SUBS="yes"
+LIST_FORMATS="no"
+EXTRA_ARGS=()
+
+# --- parse args ---
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --video)        MODE="video"; shift ;;
+    --no-subs)      SUBS="no"; shift ;;
+    --list-formats) LIST_FORMATS="yes"; shift ;;
+    --extra)        EXTRA_ARGS+=($2); shift 2 ;;
+    --)             shift; break ;;
+    *)              break ;;
+  esac
+done
+
+URL="${1:-}"
+if [ -z "$URL" ]; then
+  echo "Usage: youtube-dl [--video|--no-subs|--list-formats] \"<URL>\"" >&2
+  exit 1
+fi
+
+# --- build common args ---
+COMMON_ARGS=(
+  --no-playlist
+  --no-update
+  --cookies-from-browser edge
+)
+
+if [ -n "$NODE_BIN" ]; then
+  COMMON_ARGS+=(--js-runtimes "node:$NODE_BIN")
+fi
+
+# --- list formats mode ---
+if [ "$LIST_FORMATS" = "yes" ]; then
+  exec "$YTDLP" "${COMMON_ARGS[@]}" -F "$URL"
+fi
+
+# --- download mode ---
+OUTPUT_TEMPLATE="%(title).200B [%(id)s].%(ext)s"
+
+if [ "$MODE" = "audio" ]; then
+  DOWNLOAD_ARGS=(
+    -x --audio-format mp3 --audio-quality 0
+  )
+else
+  DOWNLOAD_ARGS=(
+    -f "bestvideo+bestaudio/best"
+  )
+fi
+
+SUB_ARGS=()
+if [ "$SUBS" = "yes" ]; then
+  SUB_ARGS=(
+    --write-subs
+    --write-auto-subs
+    --sub-langs "zh.*,en.*"
+  )
+fi
+
+exec "$YTDLP" \
+  "${COMMON_ARGS[@]}" \
+  "${DOWNLOAD_ARGS[@]}" \
+  "${SUB_ARGS[@]}" \
+  "${EXTRA_ARGS[@]}" \
+  -o "$OUTPUT_TEMPLATE" \
+  "$URL"

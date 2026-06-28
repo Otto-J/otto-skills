@@ -32,6 +32,50 @@ done
 
 If the file has a misleading suffix such as `.dmg`, inspect it with `file`. A valid standalone macOS build reports `Mach-O universal binary` or a specific Mach-O executable architecture. Rename it to `yt-dlp` before placing it under `bin/`.
 
+## YouTube downloads (default behavior)
+
+YouTube now requires both authentication and a JavaScript runtime to extract media URLs. The bundled `youtube-dl` wrapper script bakes in the working defaults for this machine:
+
+- **Edge cookies** (`--cookies-from-browser edge`) — bypasses "Sign in to confirm you're not a bot"
+- **node as JS runtime** (`--js-runtimes node:<path>`) — solves YouTube's n challenge; without it only storyboard images are available
+- **Audio extraction to MP3** at best quality (`-x --audio-format mp3 --audio-quality 0`)
+- **Subtitles** — manual + auto, Chinese and English (`--write-subs --write-auto-subs --sub-langs "zh.*,en.*"`)
+
+### Using the wrapper
+
+```bash
+# Default: audio MP3 + subtitles
+~/.agents/skills/yt-dlp/bin/youtube-dl "https://www.youtube.com/watch?v=XXXX"
+
+# Download video+audio instead of audio only
+~/.agents/skills/yt-dlp/bin/youtube-dl --video "https://www.youtube.com/watch?v=XXXX"
+
+# Skip subtitles
+~/.agents/skills/yt-dlp/bin/youtube-dl --no-subs "https://www.youtube.com/watch?v=XXXX"
+
+# List available formats
+~/.agents/skills/yt-dlp/bin/youtube-dl --list-formats "https://www.youtube.com/watch?v=XXXX"
+```
+
+### Equivalent raw yt-dlp command
+
+If the wrapper is unavailable, use the raw binary with these flags:
+
+```bash
+YTDLP="$HOME/.agents/skills/yt-dlp/bin/yt-dlp"
+"$YTDLP" --no-playlist --no-update \
+  --cookies-from-browser edge \
+  --js-runtimes "node:$(command -v node)" \
+  -x --audio-format mp3 --audio-quality 0 \
+  --write-subs --write-auto-subs --sub-langs "zh.*,en.*" \
+  -o "%(title).200B [%(id)s].%(ext)s" \
+  "https://www.youtube.com/watch?v=XXXX"
+```
+
+### Sandbox note
+
+The bundled PyInstaller binary fails with `Failed to initialize sync semaphore` inside the sandbox. Run yt-dlp with escalated permissions (`sandbox_permissions: require_escalated`).
+
 ## Command pattern
 
 Set a variable so examples use the bundled binary:
@@ -47,7 +91,7 @@ do
 done
 ```
 
-Use quoted URLs. Add `--no-playlist` for single-video requests when the URL may point to a playlist.
+Use quoted URLs. Add `--no-playlist` for single-video requests when the URL may point to a playlist. For YouTube URLs specifically, prefer the `youtube-dl` wrapper described above.
 
 ## Common tasks
 
