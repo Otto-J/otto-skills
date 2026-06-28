@@ -1,0 +1,4 @@
+interface:
+  display_name: "UniApp News Weekly"
+  short_description: "Generate weekly uni-app branch activity reports"
+  default_prompt: "Use $uniapp-news-weekly to generate a weekly report for fxy060608 across dcloudio/uni-app branches."
