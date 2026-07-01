@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cola PR Review Loop"
+  short_description: "Fix remote PR review feedback in a loop"
+  default_prompt: "Use $cola-pr-review-loop to inspect the current Cola PR review feedback, fix issues, push, and recheck until clean."
