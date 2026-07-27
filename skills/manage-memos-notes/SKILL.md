@@ -25,52 +25,37 @@ metadata:
 - 环境变量 `MEMO_SYNC_KEY`（格式 `memos_pat_xxx`），通常在 `~/.zshrc` 中 export。
 - 脚本会自动 fallback 到 `zsh -ic` 读取，无需手动 source。
 
-## CLI 脚本
+## 用法
 
-所有操作通过一个 mjs 脚本完成：
-
-```bash
-node /Users/otto/.agents/skills/manage-memos-notes/scripts/memos.mjs <command> [args]
-```
-
-### 命令一览
-
-| 命令 | 用法 | 说明 |
-|------|------|------|
-| `list` | `list [--page-size N] [--page-token T]` | 列出备忘，默认 50 条 |
-| `get` | `get <name>` | 查看单条备忘完整 JSON |
-| `create` | `create <content> [--visibility V]` | 创建备忘，默认 PRIVATE |
-| `update` | `update <name> <content> [--visibility V]` | 更新备忘内容 |
-| `delete` | `delete <name>` | 软删除备忘（可从 Memos 回收站恢复） |
-| `search` | `search <keyword> [--page-size N]` | 按内容关键词搜索 |
-
-`<name>` 接受 `memos/xxx` 或简写 `xxx`。
-
-### 示例
+两个脚本，都在本 skill 的 `scripts/` 下：
 
 ```bash
-# 列出最近 10 条
-node scripts/memos.mjs list --page-size 10
+SKILL=/Users/otto/.agents/skills/manage-memos-notes/scripts
 
-# 创建一条私密备忘
-node scripts/memos.mjs create "明天记得交房租"
+# 增删改查（单条操作）
+node $SKILL/memos.mjs list [--page-size N]      # 列表，默认 50
+node $SKILL/memos.mjs get <name>                # 详情 JSON
+node $SKILL/memos.mjs create "内容" [--visibility PUBLIC]  # 创建，默认 PRIVATE
+node $SKILL/memos.mjs update <name> "新内容"     # 更新
+node $SKILL/memos.mjs delete <name>             # 软删除，可回收
+node $SKILL/memos.mjs search <关键词>            # 服务端搜索
 
-# 搜索包含"租房"的备忘
-node scripts/memos.mjs search 租房
-
-# 查看某条备忘详情
-node scripts/memos.mjs get memos/FVBUBoe7X8RTAcoETCkWuv
-
-# 更新内容
-node scripts/memos.mjs update memos/FVBUBoe7X8RTAcoETCkWuv "房租已交"
-
-# 软删除
-node scripts/memos.mjs delete memos/FVBUBoe7X8RTAcoETCkWuv
+# 每日同步到 Obsidian（cron 用的就是这个）
+node $SKILL/sync-to-ob.mjs [--dry-run]
 ```
+
+`<name>` 接受 `memos/xxx` 或简写 `xxx`。token 自动从环境变量或 `~/.zshrc` 读取。
+
+### sync-to-ob.mjs 说明
+
+- 拉取远端全部 memo（翻页，**pageSize 固定 100**——服务端 pageSize=200 会返回错误的陈旧快照，已踩过坑）。
+- 新 memo 写入 OB vault 的 `03 资料库/Memos同步/<日期> <id>.md`，frontmatter 直接生成 `created_at`/`updated_at` 标准格式。
+- 通过 `已处理Memos清单.md` skip list 去重，幂等可重跑；文件被挪走或删除都不会重复同步。
+- `--dry-run` 预览不写入。
 
 ## 与 Obsidian 联动
 
-Memos 同步脚本 (`~/.cola/scripts/memos-sync/sync_memos.py`) 每天会把远端 memo 拉取到 Obsidian vault 的 `03 资料库/Memos同步/` 目录。
+每日同步由本 skill 的 `sync-to-ob.mjs` 完成（cron `memos-sync` 每天 10:45 执行），远端 memo 写入 Obsidian vault 的 `03 资料库/Memos同步/` 目录。旧 Python 版 `~/.cola/scripts/memos-sync/sync_memos.py` 已弃用删除。
 
 **删除联动规则**：当用户要求删除一条 memo 且本地存在对应 Obsidian 镜像时：
 1. 先用本 skill 软删除远端 memo。
