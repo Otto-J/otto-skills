@@ -1,0 +1,4 @@
+interface:
+  display_name: 'iJust.cc RSS Reader'
+  short_description: 'Manage iJust.cc RSS feeds, articles, and OPML'
+  default_prompt: 'Use $ijustcc-rss-reader to inspect unread RSS items and manage my subscriptions safely.'
