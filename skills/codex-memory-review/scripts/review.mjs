@@ -58,6 +58,16 @@ function contentText(content) {
   if (!Array.isArray(content)) return '';
   return content.filter((part) => ['input_text', 'output_text', 'text'].includes(part?.type)).map((part) => part.text || '').join('\n');
 }
+function stripInjectedContext(text) {
+  return String(text)
+    .replace(/<recommended_plugins\b[^>]*>[\s\S]*?<\/recommended_plugins>/gi, '')
+    .replace(/<environment_context\b[^>]*>[\s\S]*?<\/environment_context>/gi, '')
+    .replace(/<in-app-browser-context\b[^>]*>[\s\S]*?<\/in-app-browser-context>/gi, '')
+    .replace(/<skill\b[^>]*>[\s\S]*?<\/skill>/gi, '')
+    .replace(/<oai-mem-citation\b[^>]*>[\s\S]*?<\/oai-mem-citation>/gi, '')
+    .replace(/(?:^|\n)# AGENTS\.md instructions[^\n]*\n+[\s\S]*?<\/INSTRUCTIONS>/gi, '')
+    .trim();
+}
 function extractMessage(row) {
   if (row.type === 'response_item' && row.payload?.type === 'message') {
     const role = row.payload.role;
@@ -124,7 +134,7 @@ async function scanSource(source, prior, scanEnd, lookbackMs) {
       const timestamp = Date.parse(row.timestamp);
       const baseline = Date.parse(prior.baselineThrough || 0);
       if (!Number.isFinite(timestamp) || timestamp <= cutoff || timestamp > scanEnd.getTime() || (Number.isFinite(baseline) && timestamp <= baseline)) continue;
-      const clean = redact(message.text).trim();
+      const clean = redact(stripInjectedContext(message.text)).trim();
       if (!clean) continue;
       const contentHash = hash(JSON.stringify([message.role, clean]));
       const key = message.id ? `id:${message.id}:revision:${contentHash}` : `hash:${hash(JSON.stringify([sessionId, message.role, row.timestamp, clean]))}`;

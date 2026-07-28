@@ -86,6 +86,19 @@ test('same message id with changed content creates a revision and uses Shanghai 
   assert.equal(sourceState.messageKeys.filter((key) => key.startsWith('id:edited-message:revision:')).length, 2);
 });
 
+test('injected Codex context is removed while the user request remains', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'codex-memory-context-'));
+  const state = path.join(root, 'state');
+  const codex = path.join(root, '.codex');
+  const wrapped = `<recommended_plugins>hidden plugin catalog</recommended_plugins>\n# AGENTS.md instructions for /repo\n\n<INSTRUCTIONS>hidden repository rules</INSTRUCTIONS>\n<environment_context>hidden environment</environment_context>\n<in-app-browser-context source="ambient-ui-state">hidden browser state</in-app-browser-context>\n真实请求保留下来\n<skill><name>hidden-skill</name>hidden skill body</skill>`;
+  await fixture(codex, 'context-session', [meta('context-session'), user('context-message', wrapped)]);
+  run(['sources', 'add', '--state-dir', state, '--source-id', 'current', '--codex-home', codex]);
+  const prepared = run(['prepare', '--state-dir', state, '--now', '2026-07-28T09:00:00.000Z']);
+  const bundle = await readFile(path.join(prepared.runDir, 'bundle.md'), 'utf8');
+  assert.match(bundle, /真实请求保留下来/);
+  assert.doesNotMatch(bundle, /hidden plugin|hidden repository|hidden environment|hidden browser|hidden skill/);
+});
+
 test('baseline suppresses old events without inventing processed keys', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'codex-memory-baseline-'));
   const state = path.join(root, 'state');

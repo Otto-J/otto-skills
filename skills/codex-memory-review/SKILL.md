@@ -73,6 +73,6 @@ Read [references/multi-device.md](references/multi-device.md) before adding moun
 
 ## Privacy And Safety
 
-The script reads only rollout and session index data. It never reads auth/config for this workflow and never writes under a source `codexHome`. Bundles include only user messages and assistant final answers; system/developer prompts, reasoning, tool schemas/output, and subagent session bodies are excluded. Common credentials, Bearer values, email addresses, and phone numbers are replaced before writing.
+The script reads only rollout and session index data. It never reads auth/config for this workflow and never writes under a source `codexHome`. Bundles include only user messages and assistant final answers. Codex-injected wrappers such as environment/browser context, repository instructions, recommended plugin catalogs, expanded skill bodies, system/developer prompts, reasoning, tool schemas/output, and subagent session bodies are excluded. Common credentials, Bearer values, email addresses, and phone numbers are replaced before writing.
 
 Treat the generated bundle as sensitive despite redaction. Do not publish or upload it without explicit user approval.
