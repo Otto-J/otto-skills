@@ -1,0 +1,4 @@
+interface:
+  display_name: "Hermes Aliyun"
+  short_description: "Operate Hermes safely through the Aliyun SSH alias."
+  default_prompt: "Use $hermes-aliyun to inspect or configure the Hermes deployment on Aliyun."
