@@ -1,0 +1,23 @@
+{
+  "skill_name": "cola-prod-logs",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/cola-prod-logs 刚才我说了：在 zshrc 里，你看看怎么回事",
+      "expected_output": "Find the recent desktop turn with input 在 zshrc 里, recover its promptId and tool failure, redact credentials, and explain the actual impact read-only.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "今天上午十点左右我让 Cola 查 1Panel，它中间提示 shell 有问题。看看生产日志里发生了什么，先别改。",
+      "expected_output": "Use approximate local time and fuzzy input clues to identify the most likely turn, distinguish observed errors from model narration, and make no changes.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "查一下 ~/.cola/logs，刚才那句可能语音识别错了，大概是 zsh 配置里，为什么工具失败？",
+      "expected_output": "Handle ASR-imperfect partial text, widen matching when needed, report ambiguity if candidates tie, and avoid dumping unrelated trace content or secrets.",
+      "files": []
+    }
+  ]
+}
