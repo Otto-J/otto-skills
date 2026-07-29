@@ -19,7 +19,7 @@ Default rhythm:
 6. **Technical details**: Code paths, commands, request shapes, runtime observations, and pitfalls.
 7. **Current judgment**: What the result means and what the next concrete step should be.
 8. **Visual pass**: Decide whether the article needs additional Mermaid or Xiaohei-style visuals, then provide visual slots or prompts.
-9. **De-AI flavor pass**: After the draft is written to a file, run the tell-finder script, then rewrite every flagged paragraph. See the "Post-Write De-AI Flavor Pass" section.
+9. **Plain-language pass**: After the draft is written to a file, run the tell-finder script and rewrite every flagged paragraph. See the "Post-Write Plain-Language Pass" section.
 
 Keep the article grounded in what was actually tested. Mark technical facts as docs, source code, runtime behavior, logs, screenshots, or inference.
 
@@ -35,6 +35,7 @@ Default reader: a technical peer, product builder, or future self who wants the 
 - Keep the default article compact. A normal article should stay around 1,000-1,800 Chinese characters before the technical appendix.
 - Keep each section focused on one job.
 - Use direct claims. State distinctions as parallel positive facts.
+- Use plain, factual Chinese. Do not frame ordinary technical explanation as a staged journey. Avoid `不是……而是……`、`——`、`随后`、`最后`、`首先`、`然后`、`其次` and English scaffolding such as `first` / `then` / `finally` / `but also`. State the facts in their natural relationship; use a list when order itself matters.
 - Write in first person with an exploratory tone. Vary how you open and close paragraphs — do not recycle fixed phrases. Avoid overused tells: "值得一提的是", "总而言之", "不仅…而且…", "众所周知".
 - Give enough background for the reader to enter the story quickly.
 - Assume the reader can follow technical context once the practical problem is clear.
@@ -59,7 +60,7 @@ Use this shape as the default. Section order is fixed — background, then the r
 
 **产物**
 - Job: the working result in plain language. A short list of what works / what is partial / what is unverified, plus only the strongest single piece of evidence (one log line, screenshot, command, file path, or behavior).
-- Headings you can use or replace: 我最后跑出了什么 / 结果 / 跑通的东西
+- Headings you can use or replace: 结果 / 跑通的东西 / 当前状态
 
 **做法路径**
 - Job: the solution path as a sequence (did X, added Y, fixed Z), focused on decisions and tradeoffs.
@@ -93,7 +94,7 @@ A ready-to-use skeleton. The headings below are starter labels — rename them t
 
 ## 我为什么要试这个
 
-## 我最后跑出了什么
+## 结果
 
 ## 我是怎么把它做出来的
 
@@ -306,9 +307,9 @@ QA checklist:
 - The image feels like a sparse hand-drawn product sketch.
 - The image uses a fresh metaphor for the article.
 
-## Post-Write De-AI Flavor Pass
+## Post-Write Plain-Language Pass
 
-AI-written Chinese text leans on a few crutch patterns that give it away. The two most common are the em dash `——` (used to tack on a clause) and the `不是…而是…` construction (used to draw a contrast). Run this pass once the article is written to a file. Do not skip it.
+Run this pass once the article is written to a file. It catches phrases that make a technical note sound artificially staged or argumentative: dash-led clauses, `不是……而是……`, sequence scaffolding, and English connector phrases.
 
 ### 1. Scan
 
@@ -319,24 +320,36 @@ node <skill-dir>/scripts/find-ai-tells.mjs <article.md>
 node <skill-dir>/scripts/find-ai-tells.mjs <article.md> --pretty   # readable
 ```
 
-It returns a JSON array (stdout). Each entry has `paragraphIndex`, `matches` (which of `——` / `而是` it hit), the raw `paragraph`, plus `prev` / `next` for context. The summary line goes to stderr so the JSON stays clean.
+It returns a JSON array (stdout). Each entry has `paragraphIndex`, `matches`, the raw `paragraph`, plus `prev` / `next` for context. The summary line goes to stderr so the JSON stays clean.
 
-The script lives next to this SKILL.md under `scripts/find-ai-tells.mjs`. To add more tells later (e.g. `总而言之`, `值得一提的是`, `不仅…而且…`), extend the `TELLS` map in that file.
+The script lives next to this SKILL.md under `scripts/find-ai-tells.mjs`.
 
 ### 2. Rewrite each flagged paragraph
 
 For every hit, rewrite the paragraph using `prev` and `next` as surrounding context. Rules:
 
-- Remove every `——`. Do not just delete the dash — restructure the sentence so it reads naturally without it (split into two sentences, use a comma or period, or fold the clause in).
-- Remove the `不是…而是…` construction. State the positive claim directly; if a contrast is genuinely needed, use `实际上` / `真正的` sparingly, or two plain sentences.
-- Keep the paragraph's meaning, evidence anchors (file paths, commands, log lines), and exploratory voice intact. Only the phrasing changes.
-- Do not introduce new tells while rewriting.
+- Remove `—` / `——` by restructuring the sentence. Use a period, comma, or a plain independent sentence where appropriate.
+- Remove `不是……而是……`. State the positive fact directly.
+- Remove `随后`、`最后`、`首先`、`然后`、`其次` and `first` / `then` / `finally` when they merely arrange prose. Keep only a factual sequence that the reader needs to reproduce the work; use a list or numbered steps for that case.
+- Remove `but also`. State the two facts independently or use a concise Chinese coordination that preserves the evidence.
+- Keep the paragraph's meaning, evidence anchors (file paths, commands, log lines), and exploratory voice intact. Do not introduce new tells while rewriting.
 
-### 3. Write back
+### 3. Write back and report
 
-Replace the flagged paragraphs in the article with the rewritten versions. After writing back, re-run the scan to confirm zero hits. If any remain, rewrite again.
+Replace the flagged paragraphs in the article, then re-run the scan until it reports zero hits. When reporting a rewrite, use this structure:
 
-Only the scan step is automated; the rewrite is your judgment, not a mechanical deletion.
+```text
+包含 x 处：
+
+- 原始内容：...
+- 改动后内容：...
+
+不包含内容：
+
+- ...
+```
+
+Only the scan step is automated; the rewrite is a writing judgment, not mechanical deletion.
 
 
 
