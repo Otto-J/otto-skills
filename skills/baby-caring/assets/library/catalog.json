@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.1.0",
+  "distribution": {
+    "mode": "metadata_only",
+    "reason": "Copyrighted originals, full-text indexes, and page images are not redistributed with the public skill.",
+    "library_env": "BABY_CARING_LIBRARY"
+  },
+  "books": [
+    {
+      "slug": "aap7",
+      "title": "美国儿科学会育儿百科（第7版）",
+      "format": "mobi",
+      "isbn": "978-7-5714-0900-5",
+      "source_sha256": "e76290307351b6b6cd293b66cf89fbcd11dbf2689ae08217dabb2daab272422c",
+      "source_size_bytes": 23070139,
+      "path": "assets/books/aap7",
+      "text_kind": "native_text",
+      "location_model": "heading_path_and_fragment"
+    },
+    {
+      "slug": "cui",
+      "title": "崔玉涛育儿百科",
+      "format": "pdf",
+      "isbn": "978-7-5086-9836-6",
+      "source_sha256": "31ee7bbdcf8fc9640493bae07b435670011a930b93b2188bccdf8514597f46cc",
+      "source_size_bytes": 86684129,
+      "page_count": 610,
+      "path": "assets/books/cui",
+      "text_kind": "ocr_text",
+      "location_model": "pdf_page_and_printed_page"
+    }
+  ]
+}

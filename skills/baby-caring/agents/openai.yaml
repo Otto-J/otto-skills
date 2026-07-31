@@ -1,0 +1,4 @@
+interface:
+  display_name: "Baby Caring Knowledge Base"
+  short_description: "Search parenting books with verified citations"
+  default_prompt: "Use $baby-caring to answer my baby-care question with verified citations from the local books."

@@ -14,6 +14,7 @@
 - `skills/tencent-cloud/`: 腾讯云 API 自动化辅助。
 - `skills/esp32s3-box0-guide/`: ESP32-S3 BOX0 学习、刷机和验证流程。
 - `skills/codex-history-repair/`: Codex sidebar/resume 历史丢失时，修复 rollout provider metadata、SQLite thread 索引和全局状态。
+- `skills/baby-caring/`: 检索本地中文育儿书库，返回带原文、页码/章节定位和证据文件的婴幼儿护理回答；公开包只包含运行代码和书目元数据，语料通过 `BABY_CARING_LIBRARY` 外置配置。
 
 索引规则：
 
@@ -59,6 +60,14 @@ npx skills@latest add Otto-J/otto-skills --all
 npx skills@latest add Otto-J/otto-skills --skill uts-harmony -y
 ```
 
+例如安装 `baby-caring`：
+
+```bash
+npx skills@latest add Otto-J/otto-skills --skill baby-caring -y
+```
+
+该 skill 需要用户合法持有并准备本地书库。安装后的目录契约、书目版本和 SHA-256 见 `skills/baby-caring/references/library-setup.md`；为避免公开分发受版权保护的原书、全文索引和扫描页图，这些文件不包含在仓库中。
+
 安装到指定 agent：
 
 ```bash
@@ -94,4 +103,5 @@ npx skills@latest add https://github.com/Otto-J/otto-skills --skill uts-harmony 
 - 新增 skill 时，在 `skills/<skill-name>/SKILL.md` 写清楚触发场景、工作流、输入输出和验证方式。
 - 新增脚本时优先使用 `.mjs`，通过 `node scripts/xxx.mjs` 执行；不要依赖 `chmod +x`。
 - 新增 Agent 时放在根目录 `agents/`，并在 front matter 中写清楚用途、模型、工具权限和适用场景。
+- 带版权语料的 skill 只提交运行代码、数据契约和来源元数据，使用环境变量连接用户本地合法持有的语料，不提交原书、全文索引或页图。
 - 涉及鸿蒙平台 API 或组件细节时，优先查询本地文档 `~/Documents/harmony-api-21`。
