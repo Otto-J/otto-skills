@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cola SEO Monitor"
+  short_description: "生成严谨简洁的 GSC、GA4、Sitemap 与索引趋势报告"
+  default_prompt: "使用 $cola-seo-monitor 生成 Cola 最新 SEO 正式报告，包含原始表格、基本结论与下一步举措。"
