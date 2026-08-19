@@ -420,7 +420,7 @@ test('silent stalls use trace timestamps when the main log has no correlation id
     )
     fs.writeFileSync(
       path.join(root, 'logs', 'trace-private-name.jsonl'),
-      '{"ts":"2026-06-22T16:51:30.000Z","type":"system_prompt","systemPrompt":"private"}\n'
+      '{"ts":"2026/6/23 00:51:30","type":"system_prompt","systemPrompt":"private"}\n'
     )
     const analysis = await analyzeFeedbackBundle({
       zipPath: root,
@@ -429,9 +429,79 @@ test('silent stalls use trace timestamps when the main log has no correlation id
     assert.equal(analysis.inventory.traces, 1)
     assert.equal(analysis.supplementalEvidence.length, 1)
     assert.equal(analysis.supplementalEvidence[0].selectedBy, 'time-window')
+    assert.equal(analysis.supplementalEvidence[0].lastTimestamp, '2026-06-22T16:51:30.000Z')
     assert.doesNotMatch(
       JSON.stringify(analysis.supplementalEvidence),
       /private-name|systemPrompt|private/
+    )
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('supplemental evidence prefers epoch timing over trace wall-clock text', async () => {
+  const root = temporaryDirectory('try-to-fix-epoch-trace-')
+  try {
+    fs.mkdirSync(path.join(root, 'logs'), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, 'logs', 'cola-2026-06-22.log'),
+      '[2026-06-22 16:47:18.532] [INFO] request accepted\n'
+    )
+    fs.writeFileSync(
+      path.join(root, 'logs', 'trace-with-epoch.jsonl'),
+      `${JSON.stringify({
+        ts: '2026/6/24 00:51:30',
+        startTime: Date.parse('2026-06-22T16:51:00.000Z'),
+        endTime: Date.parse('2026-06-22T16:51:30.000Z'),
+        type: 'system_prompt',
+        systemPrompt: 'private'
+      })}\n`
+    )
+
+    const analysis = await analyzeFeedbackBundle({
+      zipPath: root,
+      feedback: { createdAt: '2026-06-22T16:52:00Z', platform: 'mac' }
+    })
+
+    assert.equal(analysis.supplementalEvidence.length, 1)
+    assert.equal(analysis.supplementalEvidence[0].lastTimestamp, '2026-06-22T16:51:30.000Z')
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('correlation discovery keeps IDs after the first 80 entries', async () => {
+  const root = temporaryDirectory('try-to-fix-many-correlations-')
+  try {
+    fs.mkdirSync(path.join(root, 'logs'), { recursive: true })
+    const sessionIds = Array.from(
+      { length: 81 },
+      (_value, index) => `session-${String(index).padStart(3, '0')}`
+    )
+    fs.writeFileSync(
+      path.join(root, 'logs', 'cola-2026-06-22.log'),
+      sessionIds
+        .map(
+          (sessionId, index) =>
+            `[2026-06-22 16:${String(index % 60).padStart(2, '0')}:00.000] [INFO] prompt start sessionId=${sessionId}`
+        )
+        .join('\n')
+    )
+    fs.writeFileSync(
+      path.join(root, 'logs', 'trace-last-session.jsonl'),
+      `{"type":"tool_start","sessionId":"${sessionIds.at(-1)}"}\n`
+    )
+
+    const analysis = await analyzeFeedbackBundle({
+      zipPath: root,
+      feedback: { createdAt: '2026-06-22T16:59:00Z', platform: 'mac' }
+    })
+
+    assert.equal(analysis.correlations.length, 81)
+    assert.ok(
+      analysis.supplementalEvidence.some(
+        (item) => item.selectedBy === 'correlation' && item.matchedCorrelations.length === 1
+      )
     )
   } finally {
     fs.rmSync(root, { recursive: true, force: true })

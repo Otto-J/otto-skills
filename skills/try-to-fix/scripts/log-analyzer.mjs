@@ -17,6 +17,7 @@ const MAX_LOG_LINE_CHARS = 700
 const DEFAULT_MAX_BLOCKS = 12
 const MAX_SUPPLEMENTAL_EVIDENCE = 40
 const FULL_SUPPLEMENTAL_SCAN_BYTES = 8 * 1024 * 1024
+const ASIA_SHANGHAI_OFFSET_MS = 8 * 60 * 60 * 1000
 
 const EXPLICIT_ERROR_PATTERN = /\[(?:ERROR|FATAL)\]/
 const KEYWORD_ERROR_PATTERNS = [
@@ -457,7 +458,7 @@ function collectCorrelations(lines) {
       })
     }
   }
-  return results.slice(0, 80)
+  return results
 }
 
 function structuralSignals(lines) {
@@ -475,15 +476,50 @@ function structuralSignals(lines) {
   return patterns.filter(([, pattern]) => pattern.test(joined)).map(([name]) => name)
 }
 
+function parseSupplementalStringTimestamp(value) {
+  const shanghaiWallTime =
+    /^(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2}):(\d{2})(?:\.(\d+))?$/.exec(
+      String(value || '').trim()
+    )
+  if (shanghaiWallTime) {
+    const millis = Number.parseInt((shanghaiWallTime[7] || '').padEnd(3, '0').slice(0, 3), 10) || 0
+    const timestamp =
+      Date.UTC(
+        Number.parseInt(shanghaiWallTime[1], 10),
+        Number.parseInt(shanghaiWallTime[2], 10) - 1,
+        Number.parseInt(shanghaiWallTime[3], 10),
+        Number.parseInt(shanghaiWallTime[4], 10),
+        Number.parseInt(shanghaiWallTime[5], 10),
+        Number.parseInt(shanghaiWallTime[6], 10),
+        millis
+      ) - ASIA_SHANGHAI_OFFSET_MS
+    return Number.isNaN(timestamp) ? null : timestamp
+  }
+
+  const timestamp = new Date(value).getTime()
+  return Number.isNaN(timestamp) ? null : timestamp
+}
+
+function parseEpochTimestamp(value) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return null
+  const timestamp = numeric < 100_000_000_000 ? numeric * 1000 : numeric
+  return Number.isNaN(new Date(timestamp).getTime()) ? null : timestamp
+}
+
 function supplementalTimestamp(lines) {
   for (let index = lines.length - 1; index >= 0; index -= 1) {
-    const parsedLogTime = parseLogTimestamp(lines[index])
+    const parsedLogTime = parseLogTimestamp(lines[index], { utc: true })
     if (parsedLogTime) return parsedLogTime
-    const timestamps = [
+    const stringTimestamps = [
       ...lines[index].matchAll(/"(?:ts|timestamp|createdAt|updatedAt|time)"\s*:\s*"([^"]+)"/g)
     ]
-      .map((match) => new Date(match[1]).getTime())
-      .filter((value) => !Number.isNaN(value))
+      .map((match) => parseSupplementalStringTimestamp(match[1]))
+      .filter((value) => value !== null)
+    const epochTimestamps = [...lines[index].matchAll(/"(?:startTime|endTime)"\s*:\s*(\d{10,13})/g)]
+      .map((match) => parseEpochTimestamp(match[1]))
+      .filter((value) => value !== null)
+    const timestamps = epochTimestamps.length > 0 ? epochTimestamps : stringTimestamps
     if (timestamps.length > 0) return new Date(Math.max(...timestamps)).toISOString()
   }
   return null

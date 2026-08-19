@@ -3,7 +3,7 @@ name: try-to-fix
 description: "Read-only diagnosis for one Cola GitHub issue. Start from the user's reported behavior, collect every trusted feedback attachment, inspect bounded log/trace/session evidence, retrieve high-recall Sentry candidates, apply Cola error-message mappings, and produce a concise evidence-scoped assessment. Use for 'try to fix', '修复反馈', 'feedback issue', or diagnosing a specific Cola issue."
 allowed-tools: Bash(*), Read, Glob, Grep
 metadata:
-  version: "2.1.0"
+  version: '2.2.0'
 ---
 
 # Try To Fix
@@ -59,9 +59,9 @@ If a signed URL has expired, an already cached zip in the same Issue slot may be
 
 For each unique zip, read all Cola logs on the feedback date; otherwise use the nearest dated set. Inventory trace, session, diagnostic, and crash files.
 
-Desktop and mobile `cola-*.log` timestamps are UTC even though they omit a trailing `Z`. A benign `INFO` line containing words such as `closed` or `timeout` is not an error anchor unless it also carries an explicit failure signal. When no relevant failure is present, use feedback creation time for Sentry retrieval instead of promoting unrelated nearby noise.
+Desktop and mobile `cola-*.log` timestamps are UTC even though they omit a trailing `Z`. Production trace `ts` values are Asia/Shanghai wall-clock time without an offset; normalize them as UTC+8, or prefer numeric `startTime`/`endTime` fields when present. A benign `INFO` line containing words such as `closed` or `timeout` is not an error anchor unless it also carries an explicit failure signal. When no relevant failure is present, use feedback creation time for Sentry retrieval instead of promoting unrelated nearby noise.
 
-Use IDs found in the selected logs to retrieve related trace/session structure. Supplemental evidence intentionally contains hashed correlation IDs, structural signals, and timestamps—not prompts, assistant text, or raw session contents. For silent stalls, trace/session evidence may be more useful than ERROR lines.
+Use all IDs found in the selected logs to retrieve related trace/session structure; do not discard them with an arbitrary count cap. When the exact failure time is unknown, locally search extracted records using user-story keywords and correlation IDs instead of assuming feedback creation time is the failure time. Supplemental evidence intentionally contains hashed correlation IDs, structural signals, and timestamps—not prompts, assistant text, or raw session contents. For silent stalls, trace/session evidence may be more useful than ERROR lines.
 
 For semantic failures such as wrong time interpretation, lost context, or speaker confusion, structural evidence alone may be insufficient. Privately inspect the relevant extracted trace/session records by feedback time and correlation when needed to locate the failure, but keep prompts, responses, and session content out of the user-facing answer; report only the minimal observed behavior and role/timing facts.
 
