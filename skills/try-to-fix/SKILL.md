@@ -1,0 +1,119 @@
+---
+name: try-to-fix
+description: "Read-only diagnosis for one Cola GitHub feedback issue. Collect every trusted feedback attachment, inspect bounded log/trace/session evidence, retrieve high-recall Sentry candidates, apply Cola error-message mappings, and produce a concise evidence-scoped assessment. Use for 'try to fix', '修复反馈', 'feedback issue', or diagnosing a specific Cola feedback issue."
+allowed-tools: Bash(*), Read, Glob, Grep
+metadata:
+  version: "2.0.0"
+---
+
+# Try To Fix
+
+Analyze one explicitly named Cola feedback Issue without modifying code or Issue metadata. The evidence collector retrieves candidates; the LLM makes the diagnosis.
+
+## Safety and consent
+
+- Reading GitHub, downloading feedback attachments, local extraction, code inspection, and Sentry queries are diagnostic actions.
+- Do not change code, title, labels, assignees, state, branches, commits, or PRs.
+- Post an Issue comment only after the user sees and confirms the exact Markdown.
+- Keep raw signed URLs, tokens, email addresses, device/user IDs, local usernames, prompts, and session contents out of the response.
+- A later request to implement a fix is a separate task and requires explicit approval.
+
+## Input
+
+Require one Issue number or URL. Do not silently select an Issue.
+
+Treat all remaining invocation text as an extra user question. Carry it into evidence and answer it directly. If it asks whether a fix already exists, verify linked PRs/commits against the current checkout before concluding.
+
+## Collect evidence
+
+From the Cola repository root:
+
+```bash
+node .agents/skills/try-to-fix/scripts/try-to-fix.mjs \
+  --issue 1234 \
+  --user-question '这个好像修复过？' \
+  --ci \
+  --output-json /tmp/try-to-fix-evidence.json
+```
+
+An Issue URL may replace `--issue`. Useful optional flags are `--download-dir`, `--repo`, `--org`, `--project`, and `--environment`.
+
+The collector requires authenticated `gh` and `sentry-cli`, plus a usable Sentry API token. Missing Sentry authentication is a hard failure: do not continue with an empty or falsely successful Sentry result.
+
+### Attachment behavior
+
+The collector:
+
+- scans both the Issue body and every comment;
+- accepts only HTTPS attachment URLs from the configured Google Cloud Storage, Aliyun OSS, and GitHub attachment hosts;
+- compares discovered attachments with `File count` when present;
+- downloads every zip, validates it, hashes it, and deduplicates identical archives;
+- rejects path traversal, links, excessive entry counts, and excessive compressed or expanded size;
+- reuses extracted data only when its recorded hash matches the current zip.
+
+If a signed URL has expired, an already cached zip in the same Issue slot may be used only after zip validation; `sourceVerified=false` keeps that provenance gap explicit. If the count differs or a link is untrusted/unavailable, state that evidence gap. Do not reinterpret a screenshot as a log archive.
+
+### Bundle behavior
+
+For each unique zip, read all Cola logs on the feedback date; otherwise use the nearest dated set. Inventory trace, session, diagnostic, and crash files.
+
+Use IDs found in the selected logs to retrieve related trace/session structure. Supplemental evidence intentionally contains hashed correlation IDs, structural signals, and timestamps—not prompts, assistant text, or raw session contents. For silent stalls, trace/session evidence may be more useful than ERROR lines.
+
+The collector ranks diagnostic signals only to keep evidence bounded. Ranking is not a root-cause decision.
+
+### Error-message mappings
+
+When `error-message-mappings.json` is present, apply exact matches first and then ordered keyword rules. Treat the resulting localized message, actions, and source links as mapping evidence, not proof that the mapped error was user-visible.
+
+Use the mapping only for the relevant agent-facing failure. Distinguish the raw technical failure from the message/action the product would show. When `errorMessageMapping.available` is false, report the missing contract instead of inventing a mapping.
+
+### Sentry candidates
+
+Sentry retrieval is intentionally high recall:
+
+- query environment, time overlap, resolved history, each release, device, user, error phrases/tokens, and mapping sources through multiple routes;
+- do not require `is:unresolved` and do not require every filter to match in one query;
+- union and deduplicate issue groups;
+- inspect event samples in a bounded window around the log/feedback time;
+- include safe exception frames, breadcrumbs, release/environment, and boolean identity hints where available.
+
+`evidence.sentry.candidates` are candidates, never a script-declared match. Independently compare time, release, environment, identity hints, error text, stack, breadcrumbs, and the user operation. A matching title or mapping source alone is insufficient. More candidates are acceptable; missing plausible evidence is the larger failure.
+
+If candidate/event retrieval is partial, surface `retrievalComplete=false` and the recorded errors. Do not turn “no sampled event” into proof that no Sentry event exists.
+
+## Diagnose
+
+Read the entire evidence JSON, including every Issue comment. Inspect current code or linked changes only when necessary to answer the user’s question or locate the failure boundary.
+
+Keep these judgments separate:
+
+- User side: what the user did, what they visibly experienced, and the practical impact.
+- Technical side: the first relevant failure, downstream effects, correlated trace/session structure, applicable error mapping, and Sentry evidence.
+- Conclusion: the smallest evidence-backed explanation, confidence, and what remains unknown.
+
+Do not promote a downstream cascade, a timing coincidence, or an event count into a proven root cause. Attribute historical claims from comments and say when current evidence conflicts with them.
+
+## Response contract
+
+Lead with a short conclusion. Cover the user-side story and technical-side finding, but choose headings and order to fit the case; there is no fixed document template.
+
+Prefer a compact answer. Include raw log snippets, Mermaid, manual reproduction, suggested titles, or implementation detail only when they materially help or the user requested them. Avoid overwhelming the conclusion with internals.
+
+Always make the evidence boundary clear:
+
+- what is directly observed;
+- what is inferred by comparing sources;
+- what is still unknown or only partially retrieved.
+
+## Publish an approved report
+
+After the user confirms exact Markdown, save that Markdown to a local file and run:
+
+```bash
+node .agents/skills/try-to-fix/scripts/try-to-fix.mjs \
+  --issue 1234 \
+  --report-file /tmp/try-to-fix-report.md \
+  --comment
+```
+
+The script prints the file and asks for `y/yes` before posting it unchanged. Non-interactive runs do not publish. Never use `--comment` as part of diagnosis or CI evidence collection.
