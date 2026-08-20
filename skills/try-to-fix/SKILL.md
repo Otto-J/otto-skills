@@ -3,7 +3,7 @@ name: try-to-fix
 description: "Read-only diagnosis for one Cola GitHub issue. Start from the user's reported behavior, collect every trusted feedback attachment, inspect bounded log/trace/session evidence, retrieve high-recall Sentry candidates, apply Cola error-message mappings, and produce a concise evidence-scoped assessment. Use for 'try to fix', '修复反馈', 'feedback issue', or diagnosing a specific Cola issue."
 allowed-tools: Bash(*), Read, Glob, Grep
 metadata:
-  version: '2.2.0'
+  version: '2.3.0'
 ---
 
 # Try To Fix
@@ -96,6 +96,18 @@ Read `evidenceScope` before using Sentry. `anchorQuality=none` means the candida
 Read the entire evidence JSON, including the full Issue body and every Issue comment. Inspect current code or linked changes when necessary to answer the user’s question or locate the failure boundary.
 
 First reconstruct the user-visible operation and failure from the Issue narrative. Treat a log or Sentry event as relevant only if it can explain that operation and outcome. Do not let a high-scoring generic error replace the problem the user actually reported.
+
+### Root-cause gate
+
+Before naming a root cause, answer these three questions:
+
+1. **What exactly misbehaved?** Identify the specific user-visible object or action. Do not substitute a nearby status, timer, warning, or error merely because it appeared at the same time.
+2. **Did the underlying data repeat or change?** Compare the relevant protocol events and persisted session/trace entries. For duplicated, flickering, or re-animated UI, distinguish repeated source data from a single item being projected or mounted repeatedly.
+3. **Can the proposed cause reproduce the visible effect?** Trace the smallest relevant state transition through projection/store/rendering code, and replay a minimal before/after state when practical. A plausible code path or matching interval is not enough by itself.
+
+Feedback attachments may preserve only final state and contain less streaming detail than local production logs. That is an acceptable evidence limit. Do not require access to the reporter's local profile; if the transition cannot be proved from the bundle and current code, report the narrowest proven boundary and keep the root cause unconfirmed.
+
+Call a root cause **confirmed** only when runtime evidence or a deterministic state/code reproduction connects the proposed trigger to the reported effect. Otherwise label it as a likely cause or state that the root cause is not yet confirmed.
 
 Keep these judgments separate:
 
