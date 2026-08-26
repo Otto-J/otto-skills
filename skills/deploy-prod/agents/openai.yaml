@@ -1,0 +1,4 @@
+interface:
+  display_name: "Deploy Prod"
+  short_description: "严格发布 Cola Admin Dashboard 到生产环境"
+  default_prompt: "使用 $deploy-prod 严格预检并发布 Cola Admin Dashboard 到生产环境。"
