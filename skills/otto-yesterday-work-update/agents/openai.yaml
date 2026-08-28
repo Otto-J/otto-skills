@@ -1,0 +1,4 @@
+interface:
+  display_name: "Otto 昨天工作更新"
+  short_description: "汇总 Otto 昨日跨多个 Git 仓库的工作交接与今天跟进事项"
+  default_prompt: "汇总我昨天在全部工作仓库的工作更新。"
