@@ -13,13 +13,15 @@ import {
 import { analyzeFeedbackBundle } from './log-analyzer.mjs'
 import {
   assessEvidenceScope,
+  buildSkippedSentryEvidence,
   buildIssueEvidence,
   buildSentryCandidateQueries,
   discoverFeedbackAttachments,
   normalizeIssueComments,
   parseArgs,
   parseFeedbackIssue,
-  resolveSentryTarget
+  resolveSentryTarget,
+  shouldCollectSentry
 } from './try-to-fix.mjs'
 
 function temporaryDirectory(prefix) {
@@ -228,6 +230,39 @@ test('Sentry candidate retrieval uses several recall routes without unresolved g
   )
 })
 
+test('Sentry retrieval requires a log error anchor and exposes an explicit skipped result', () => {
+  assert.equal(shouldCollectSentry({ errorBlocks: [] }), false)
+  assert.equal(shouldCollectSentry({ errorBlocks: [{ source: 'keyword-error' }] }), false)
+  assert.equal(shouldCollectSentry({ errorBlocks: [{ source: 'explicit-error' }] }), true)
+  assert.equal(
+    shouldCollectSentry({
+      errorBlocks: [{ source: 'keyword-error' }, { source: 'explicit-error' }]
+    }),
+    true
+  )
+  assert.deepEqual(
+    buildSkippedSentryEvidence({
+      project: 'cola-macos',
+      environment: 'production',
+      releases: ['cola-server@1.4.1']
+    }),
+    {
+      skipped: true,
+      skipReason: 'no-explicit-log-error',
+      project: 'cola-macos',
+      environment: 'production',
+      releases: ['cola-server@1.4.1'],
+      timeWindow: null,
+      retrievalComplete: null,
+      candidateCount: 0,
+      eventCheckedCandidateCount: 0,
+      candidateQueries: [],
+      candidates: [],
+      errors: []
+    }
+  )
+})
+
 test('error mapping prefers exact rules and then ordered keyword rules', () => {
   const config = {
     available: true,
@@ -317,6 +352,95 @@ test('log analysis reads all same-date logs and prefers the feedback platform fi
     assert.equal(analysis.selectedLogs[0].kind, 'mobile')
     assert.equal(analysis.inventory.mainLogs, 2)
     assert.match(analysis.status, /完整读取 2 个/)
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('log analysis leaves multiple narrative dates to agent interpretation', async () => {
+  const root = temporaryDirectory('try-to-fix-narrative-dates-')
+  try {
+    fs.mkdirSync(path.join(root, 'logs'), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, 'logs', 'cola-2026-08-28.log'),
+      '[2026-08-28 06:00:00.000] [ERROR] contextual upgrade error\n'
+    )
+    fs.writeFileSync(
+      path.join(root, 'logs', 'cola-2026-08-29.log'),
+      '[2026-08-29 06:06:00.000] [ERROR] narrated incident error\n'
+    )
+    fs.writeFileSync(
+      path.join(root, 'logs', 'cola-2026-08-30.log'),
+      '[2026-08-30 10:00:00.000] [INFO] feedback submitted\n'
+    )
+    fs.writeFileSync(
+      path.join(root, 'trace-incident.jsonl'),
+      '{"ts":"2026/8/29 14:10:00","type":"tool_start"}\n'
+    )
+
+    const analysis = await analyzeFeedbackBundle({
+      zipPath: root,
+      feedback: {
+        createdAt: '2026-08-30T10:00:01Z',
+        platform: 'mac',
+        description: '2026年8月28日升级，2026年8月29日14:06 充值后出现扣费。'
+      }
+    })
+
+    assert.equal(analysis.logRelativePath, 'logs/cola-2026-08-30.log')
+    assert.equal(analysis.selectedBy, 'feedback-date')
+    assert.equal(analysis.errorBlocks.length, 0)
+    assert.equal(analysis.supplementalEvidence.length, 0)
+    assert.match(analysis.status, /反馈日期 2026-08-30/)
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('log analysis discloses when it falls back to the nearest dated log', async () => {
+  const root = temporaryDirectory('try-to-fix-nearest-log-')
+  try {
+    fs.mkdirSync(path.join(root, 'logs'), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, 'logs', 'cola-2026-08-29.log'),
+      '[2026-08-29 06:06:00.000] [INFO] request accepted\n'
+    )
+
+    const analysis = await analyzeFeedbackBundle({
+      zipPath: root,
+      feedback: { createdAt: '2026-08-30T10:00:01Z', platform: 'mac' }
+    })
+
+    assert.equal(analysis.selectedBy, 'nearest-feedback-date')
+    assert.equal(analysis.selectedLogs[0].dateKey, '2026-08-29')
+    assert.match(analysis.status, /未找到反馈日期 2026-08-30 日志，已读取最近的 2026-08-29 日志/)
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('supplemental evidence is capped at one hundred filtered records', async () => {
+  const root = temporaryDirectory('try-to-fix-supplemental-cap-')
+  try {
+    fs.mkdirSync(path.join(root, 'logs'), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, 'logs', 'cola-2026-06-22.log'),
+      '[2026-06-22 16:47:18.532] [INFO] request accepted\n'
+    )
+    for (let index = 0; index < 101; index += 1) {
+      fs.writeFileSync(
+        path.join(root, `trace-failure-${String(index).padStart(3, '0')}.jsonl`),
+        `${JSON.stringify({ ts: '2026/6/20 12:00:00', type: 'error' })}\n`
+      )
+    }
+
+    const analysis = await analyzeFeedbackBundle({
+      zipPath: root,
+      feedback: { createdAt: '2026-06-22T16:52:00Z', platform: 'mac' }
+    })
+
+    assert.equal(analysis.supplementalEvidence.length, 100)
+    assert.ok(analysis.supplementalEvidence.every((item) => item.selectedBy === 'failure-signal'))
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
   }

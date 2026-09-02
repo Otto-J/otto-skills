@@ -15,7 +15,7 @@ const LOG_NAME_RE = /^cola(?:-(mobile))?-(\d{4}-\d{2}-\d{2})\.log$/
 const MAX_BLOCK_LINES = 18
 const MAX_LOG_LINE_CHARS = 700
 const DEFAULT_MAX_BLOCKS = 12
-const MAX_SUPPLEMENTAL_EVIDENCE = 40
+const MAX_SUPPLEMENTAL_EVIDENCE = 100
 const FULL_SUPPLEMENTAL_SCAN_BYTES = 8 * 1024 * 1024
 const ASIA_SHANGHAI_OFFSET_MS = 8 * 60 * 60 * 1000
 
@@ -621,6 +621,18 @@ function closestErrorBlock(blocks, createdAt) {
   })[0]
 }
 
+function logSelectionStatus(selectedLogs, createdAt) {
+  const firstSelected = selectedLogs[0]
+  const feedbackDate = dateKeyFromValue(createdAt)
+  if (firstSelected.selectedBy === 'feedback-date') {
+    return `已完整读取 ${selectedLogs.length} 个反馈日期 ${firstSelected.dateKey} 日志`
+  }
+  if (firstSelected.selectedBy === 'nearest-feedback-date') {
+    return `未找到反馈日期 ${feedbackDate} 日志，已读取最近的 ${firstSelected.dateKey} 日志`
+  }
+  return `反馈时间没有有效日期，已读取最新的 ${firstSelected.dateKey} 日志`
+}
+
 function emptyAnalysis(message) {
   return {
     root: '',
@@ -743,6 +755,7 @@ export async function analyzeFeedbackBundle({
     selectedLogs: selectedLogs.map((selected) => ({
       relativePath: selected.relPath,
       kind: selected.logKind,
+      dateKey: selected.dateKey,
       selectedBy: selected.selectedBy
     })),
     inventory: inventory.summary,
@@ -757,9 +770,10 @@ export async function analyzeFeedbackBundle({
     errorPhrases: extractErrorPhrases(errorBlocks),
     errorTime: primaryError?.timestampIso || null,
     nextStep: buildNextStep(errorBlocks),
-    status:
+    status: `${logSelectionStatus(selectedLogs, feedback.createdAt)}${
       errorBlocks.length > 0
-        ? `已完整读取 ${selectedLogs.length} 个反馈日期日志，并提取 ${errorBlocks.length} 组错误证据。`
-        : `已完整读取 ${selectedLogs.length} 个反馈日期日志，没有找到明确 ERROR 记录。`
+        ? `，并提取 ${errorBlocks.length} 组错误证据。`
+        : '，没有找到明确 ERROR 记录。'
+    }`
   }
 }

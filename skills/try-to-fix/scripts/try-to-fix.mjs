@@ -167,6 +167,9 @@ async function checkDependencies() {
   await ensureBaseTool('unzip')
   await ensureBaseTool('zipinfo')
   await ensureBaseTool('gh', ['auth', 'status'])
+}
+
+async function checkSentryDependencies() {
   await ensureBaseTool('sentry-cli', ['info'])
   const sentryToken = getSentryAuthToken()
   if (!sentryToken) {
@@ -1033,6 +1036,8 @@ async function collectSentryCandidates({
   })
 
   return {
+    skipped: false,
+    skipReason: '',
     project,
     environment,
     releases,
@@ -1057,10 +1062,32 @@ async function collectSentryCandidates({
   }
 }
 
+export function shouldCollectSentry(logAnalysis = {}) {
+  return (logAnalysis.errorBlocks || []).some((block) => block.source === 'explicit-error')
+}
+
+export function buildSkippedSentryEvidence({ project, environment, releases }) {
+  return {
+    skipped: true,
+    skipReason: 'no-explicit-log-error',
+    project,
+    environment,
+    releases,
+    timeWindow: null,
+    retrievalComplete: null,
+    candidateCount: 0,
+    eventCheckedCandidateCount: 0,
+    candidateQueries: [],
+    candidates: [],
+    errors: []
+  }
+}
+
 function mergeLogAnalyses(analyses, feedback) {
   if (analyses.length === 0) {
     return {
       envInfo: {},
+      selectedBy: '',
       selectedLogs: [],
       inventory: {},
       errorBlocks: [],
@@ -1092,6 +1119,7 @@ function mergeLogAnalyses(analyses, feedback) {
   return {
     envInfo:
       analyses.find((analysis) => Object.keys(analysis.envInfo || {}).length > 0)?.envInfo || {},
+    selectedBy: primary.selectedBy || '',
     selectedLogs: analyses.flatMap((analysis, index) =>
       (analysis.selectedLogs || []).map((log) => ({
         bundle: analysis.attachmentIndex || index + 1,
@@ -1133,6 +1161,7 @@ function mergeLogAnalyses(analyses, feedback) {
 function safeLogAnalysis(analysis) {
   return {
     inventory: analysis.inventory || {},
+    selectedBy: analysis.selectedBy || '',
     selectedLogs: analysis.selectedLogs || [],
     errorTime: analysis.errorTime || null,
     errorBlocks: (analysis.errorBlocks || []).map((block) => ({
@@ -1204,9 +1233,31 @@ function buildEvidence({
   const evidenceScope = assessEvidenceScope({ feedback, downloads, logAnalysis, sentry })
   return {
     contract: {
-      version: 2,
+      version: 8,
       sentryCandidatesRequireLlmValidation: true,
-      fixedReportStructureRequired: false
+      sentryRequiresLogErrorAnchor: true,
+      sentryReproductionAndRetrievalStatusSeparated: true,
+      fixedReportStructureRequired: true,
+      suggestedTitleRequired: true,
+      firstPersonUserStoryRequired: true,
+      timelineEvidenceRequired: true,
+      incidentNarrativeTimeRequiresAgentValidation: true,
+      preFailureBaselineRequired: true,
+      modelTransitionCheckRequired: true,
+      billingTimelineRequiredWhenRelevant: true,
+      mermaidUsageTimelineRequired: true,
+      collapsedDetailedTimelineRequired: true,
+      impactPriorityScale: ['P0', 'P1', 'P2'],
+      confidenceAndPriorityLeadRequired: true,
+      reportSections: [
+        '一句话结论',
+        '建议标题',
+        '用户故事：如果我是这个用户',
+        '用户说法与系统事实的桥',
+        '用户操作与消耗时间轴',
+        '真实对话与详细时间线',
+        '故障层与代码逻辑'
+      ]
     },
     issue: buildIssueEvidence(issue, repo),
     feedback: {
@@ -1309,7 +1360,7 @@ async function main() {
   if (args.comment && !approvedReport) throw new Error('--report-file 不能为空')
   const target = parseIssueTarget(args)
   const timing = { fetchIssueMs: 0, downloadMs: 0, analyzeLogMs: 0, sentryMs: 0, totalMs: 0 }
-  const sentryToken = await checkDependencies()
+  await checkDependencies()
 
   let mark = Date.now()
   const issue = await fetchIssueByNumber(target.repo, target.issueNumber)
@@ -1378,19 +1429,26 @@ async function main() {
     project: args.project,
     projectOverride: args.projectOverride
   })
-  const sentry = await collectSentryCandidates({
-    org: args.org,
-    project: sentryTarget.project,
-    environment: args.environmentOverride ? args.environment : sentryTarget.environment,
-    deviceId: feedback.deviceId || feedback.device,
-    userId: feedback.userId,
-    releases: sentryTarget.releases,
-    errorPhrases: logAnalysis.errorPhrases,
-    mappedErrors,
-    createdAt: feedback.createdAt,
-    errorTime: logAnalysis.errorTime,
-    token: sentryToken
-  })
+  const sentryEnvironment = args.environmentOverride ? args.environment : sentryTarget.environment
+  const sentry = shouldCollectSentry(logAnalysis)
+    ? await collectSentryCandidates({
+        org: args.org,
+        project: sentryTarget.project,
+        environment: sentryEnvironment,
+        deviceId: feedback.deviceId || feedback.device,
+        userId: feedback.userId,
+        releases: sentryTarget.releases,
+        errorPhrases: logAnalysis.errorPhrases,
+        mappedErrors,
+        createdAt: feedback.createdAt,
+        errorTime: logAnalysis.errorTime,
+        token: await checkSentryDependencies()
+      })
+    : buildSkippedSentryEvidence({
+        project: sentryTarget.project,
+        environment: sentryEnvironment,
+        releases: sentryTarget.releases
+      })
   timing.sentryMs = Date.now() - mark
   timing.totalMs = Date.now() - startedAt
 
