@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Cola Issues Master'
+  short_description: '从 Cola Issue 链接完成复现、修复、验证、PR 与经验沉淀'
+  default_prompt: '使用 $cola-issues-master 处理这个 Cola Issue：读取原始问题和评论，复现、修复并验证。'
