@@ -20,6 +20,7 @@ import {
   normalizeIssueComments,
   parseArgs,
   parseFeedbackIssue,
+  parseSentryIssueSource,
   resolveSentryTarget,
   shouldCollectSentry
 } from './try-to-fix.mjs'
@@ -73,6 +74,27 @@ test('attachment discovery reads body and comments across trusted hosts', () => 
     result.attachments.map((item) => item.source),
     ['body', 'body', 'comment']
   )
+})
+
+test('Sentry issues expose their exact source without requiring feedback metadata', () => {
+  const source = parseSentryIssueSource({
+    title: '[sentry] chat history appears empty (COLA-MACOS-3KBA)',
+    body: [
+      '来源：Sentry `COLA-MACOS-3KBA` · https://marswave-t7.sentry.io/issues/7703372756/',
+      'Event ID：`3D4AAF5CB4C7434FB79849FCE1FC8D75`',
+      '| Project | marswave-t7/cola-macos |',
+      '| Short ID | COLA-MACOS-3KBA |'
+    ].join('\n')
+  })
+  assert.deepEqual(source, {
+    organization: 'marswave-t7',
+    issueId: '7703372756',
+    shortId: 'COLA-MACOS-3KBA',
+    eventId: '3d4aaf5cb4c7434fb79849fce1fc8d75',
+    project: 'cola-macos'
+  })
+  assert.equal(parseSentryIssueSource({ title: 'Feedback: connection failed', body: '' }), null)
+  assert.equal(shouldCollectSentry({ errorBlocks: [] }, source), true)
 })
 
 test('attachment discovery ignores arbitrary markdown download hosts', () => {
@@ -201,6 +223,17 @@ test('evidence scope distinguishes runtime-backed feedback from issue-only repor
     'identity',
     'release'
   ])
+  const sourceSentry = assessEvidenceScope({
+    feedback: {},
+    downloads: [],
+    logAnalysis: {},
+    sentry: { source: { exact: true }, releases: [] }
+  })
+  assert.deepEqual(sourceSentry, {
+    mode: 'runtime-backed',
+    anchorQuality: 'strong',
+    anchorReasons: ['direct-sentry-source']
+  })
 })
 
 test('Sentry candidate retrieval uses several recall routes without unresolved gating', () => {
@@ -230,7 +263,7 @@ test('Sentry candidate retrieval uses several recall routes without unresolved g
   )
 })
 
-test('Sentry retrieval requires a log error anchor and exposes an explicit skipped result', () => {
+test('generic Sentry retrieval requires a log error anchor and exposes an explicit skipped result', () => {
   assert.equal(shouldCollectSentry({ errorBlocks: [] }), false)
   assert.equal(shouldCollectSentry({ errorBlocks: [{ source: 'keyword-error' }] }), false)
   assert.equal(shouldCollectSentry({ errorBlocks: [{ source: 'explicit-error' }] }), true)
@@ -493,6 +526,50 @@ test('semantic feedback without a real error falls back to feedback time', async
   }
 })
 
+test('turn lifecycle keeps an aborted prompt separate from the next still-running prompt', async () => {
+  const root = temporaryDirectory('try-to-fix-turn-lifecycle-')
+  try {
+    fs.mkdirSync(path.join(root, 'logs'), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, 'logs', 'cola-2026-09-04.log'),
+      [
+        '[2026-09-04 13:28:10.276] [INFO] [agent] prompt start scope=desktop:local busy=false text="你现在接口好了么"',
+        '[2026-09-04 13:28:10.581] [INFO] [agent] session ready promptId=prompt-first newSession=true provider=cola model=model-a',
+        '[2026-09-04 13:28:10.583] [INFO] [agent] session.prompt() firing promptId=prompt-first',
+        '[2026-09-04 13:30:26.013] [INFO] [ipc] agent:abort scope=desktop:local',
+        '[2026-09-04 13:30:26.026] [INFO] [agent] message-stopped promptId=prompt-first',
+        '[2026-09-04 13:30:26.048] [INFO] [agent] session.prompt() resolved promptId=prompt-first',
+        '[2026-09-04 13:30:33.834] [INFO] [agent] prompt start scope=desktop:local busy=false text="嗨"',
+        '[2026-09-04 13:30:33.906] [INFO] [agent] session ready promptId=prompt-second newSession=false provider=cola model=model-a',
+        '[2026-09-04 13:30:33.907] [INFO] [agent] session.prompt() firing promptId=prompt-second'
+      ].join('\n')
+    )
+
+    const analysis = await analyzeFeedbackBundle({
+      zipPath: root,
+      feedback: { createdAt: '2026-09-04T13:33:20Z', platform: 'mac' }
+    })
+
+    assert.equal(analysis.turnLifecycles.length, 2)
+    assert.deepEqual(
+      analysis.turnLifecycles.map((turn) => ({
+        promptText: turn.promptText,
+        outcome: turn.outcome,
+        durationMs: turn.durationMs
+      })),
+      [
+        { promptText: '你现在接口好了么', outcome: 'aborted', durationMs: 135_750 },
+        { promptText: '嗨', outcome: 'running', durationMs: null }
+      ]
+    )
+    assert.equal(analysis.turnLifecycles[0].abortSource, 'desktop-ipc')
+    assert.notEqual(analysis.turnLifecycles[0].promptFingerprint, null)
+    assert.doesNotMatch(JSON.stringify(analysis.turnLifecycles), /prompt-first|prompt-second/)
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('trace and session evidence is selected by hashed correlation without exposing content', async () => {
   const root = temporaryDirectory('try-to-fix-correlated-')
   try {
@@ -529,6 +606,190 @@ test('trace and session evidence is selected by hashed correlation without expos
     assert.doesNotMatch(serialized, /private trace detail|private session content/)
     assert.doesNotMatch(analysis.rawErrorLog, /private prompt/)
     assert.match(analysis.userPath, /内容已省略/)
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('usage evidence exposes only phase metrics and keeps unavailable values null', async () => {
+  const root = temporaryDirectory('try-to-fix-usage-')
+  try {
+    fs.mkdirSync(path.join(root, 'logs'), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, 'logs', 'cola-2026-06-22.log'),
+      '[2026-06-22 16:52:09.421] [ERROR] quota exceeded sessionId=session-private-1\n'
+    )
+    fs.writeFileSync(
+      path.join(root, 'logs', 'trace-session-private-1.jsonl'),
+      [
+        {
+          type: 'full_run',
+          sessionKey: 'session-private-1',
+          startTime: Date.parse('2026-06-22T16:50:00.000Z'),
+          endTime: Date.parse('2026-06-22T16:51:00.000Z'),
+          messages: [
+            {
+              role: 'assistant',
+              provider: 'anthropic',
+              model: 'claude-test',
+              startTime: Date.parse('2026-06-22T16:50:05.000Z'),
+              endTime: Date.parse('2026-06-22T16:50:55.000Z'),
+              stopReason: 'toolUse',
+              usage: {
+                input: 12_000,
+                output: 800,
+                cacheRead: 6_000,
+                cacheWrite: 400,
+                cost: { total: 0.42 }
+              },
+              content: [
+                { type: 'text', text: 'private assistant content' },
+                { type: 'toolCall', name: 'bash', arguments: { token: 'private-secret' } }
+              ]
+            },
+            {
+              role: 'assistant',
+              provider: 'anthropic',
+              model: 'claude-test',
+              stopReason: 'error',
+              content: [{ type: 'text', text: 'another private response' }]
+            }
+          ]
+        }
+      ]
+        .map(JSON.stringify)
+        .join('\n')
+    )
+
+    const analysis = await analyzeFeedbackBundle({
+      zipPath: root,
+      feedback: { createdAt: '2026-06-22T16:52:00Z', platform: 'mac' }
+    })
+
+    assert.equal(analysis.usagePhases.length, 2)
+    assert.deepEqual(
+      {
+        provider: analysis.usagePhases[0].provider,
+        model: analysis.usagePhases[0].model,
+        responseModel: analysis.usagePhases[0].responseModel,
+        toolCallCount: analysis.usagePhases[0].toolCallCount,
+        inputTokens: analysis.usagePhases[0].inputTokens,
+        outputTokens: analysis.usagePhases[0].outputTokens,
+        cacheReadTokens: analysis.usagePhases[0].cacheReadTokens,
+        cacheWriteTokens: analysis.usagePhases[0].cacheWriteTokens,
+        cost: analysis.usagePhases[0].cost
+      },
+      {
+        provider: 'anthropic',
+        model: 'claude-test',
+        responseModel: null,
+        toolCallCount: 1,
+        inputTokens: 12_000,
+        outputTokens: 800,
+        cacheReadTokens: 6_000,
+        cacheWriteTokens: 400,
+        cost: 0.42
+      }
+    )
+    assert.equal(analysis.usagePhases[1].inputTokens, null)
+    assert.equal(analysis.usagePhases[1].cost, null)
+    const serialized = JSON.stringify(analysis.usagePhases)
+    assert.doesNotMatch(serialized, /session-private-1|private assistant|private-secret|bash/)
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('usage evidence merges session and trace across a model switch without duplicates', async () => {
+  const root = temporaryDirectory('try-to-fix-model-switch-')
+  try {
+    fs.mkdirSync(path.join(root, 'logs'), { recursive: true })
+    fs.mkdirSync(path.join(root, 'sessions', 'desktop-local'), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, 'logs', 'cola-2026-06-22.log'),
+      [
+        '[2026-06-22 16:52:00.000] [INFO] WS Bridge → request method=model.setTier id=request-1',
+        '[2026-06-22 16:54:00.000] [INFO] [model-switch] same-session scope=desktop:local source=cola/model-paid sourceApi=openai-completions target=cola/model-free targetApi=openai-completions sessionId=session-switch-1',
+        '[2026-06-22 16:55:00.000] [ERROR] DAILY_BALANCE_LIMIT_EXCEEDED sessionId=session-switch-1'
+      ].join('\n')
+    )
+
+    const paidMessage = {
+      role: 'assistant',
+      provider: 'cola',
+      model: 'model-paid',
+      responseModel: 'gemini-paid',
+      responseId: 'response-paid-private',
+      startTime: Date.parse('2026-06-22T16:50:00.000Z'),
+      endTime: Date.parse('2026-06-22T16:50:30.000Z'),
+      timestamp: Date.parse('2026-06-22T16:50:30.000Z'),
+      stopReason: 'error',
+      usage: { input: 10_000, output: 500, cacheRead: 2_000, cost: { total: 0.3 } },
+      content: []
+    }
+    const freeMessage = {
+      role: 'assistant',
+      provider: 'cola',
+      model: 'model-free',
+      responseModel: 'gemini-free',
+      responseId: 'response-free-private',
+      startTime: Date.parse('2026-06-22T16:56:00.000Z'),
+      endTime: Date.parse('2026-06-22T16:56:30.000Z'),
+      timestamp: Date.parse('2026-06-22T16:56:30.000Z'),
+      stopReason: 'stop',
+      usage: { input: 3_000, output: 700, cacheRead: 1_000, cost: { total: 0 } },
+      content: []
+    }
+    fs.writeFileSync(
+      path.join(root, 'sessions', 'desktop-local', 'active.jsonl'),
+      [paidMessage, freeMessage]
+        .map((message) =>
+          JSON.stringify({ type: 'message', sessionId: 'session-switch-1', message })
+        )
+        .join('\n')
+    )
+    fs.writeFileSync(
+      path.join(root, 'logs', 'trace-desktop-local.jsonl'),
+      `${JSON.stringify({
+        type: 'full_run',
+        sessionKey: 'session-switch-1',
+        startTime: freeMessage.startTime,
+        endTime: freeMessage.endTime,
+        messages: [freeMessage]
+      })}\n`
+    )
+
+    const analysis = await analyzeFeedbackBundle({
+      zipPath: root,
+      feedback: { createdAt: '2026-06-22T16:57:00Z', platform: 'mac' }
+    })
+
+    assert.deepEqual(
+      analysis.usagePhases.map((phase) => ({
+        model: phase.model,
+        responseModel: phase.responseModel,
+        cost: phase.cost
+      })),
+      [
+        { model: 'model-paid', responseModel: 'gemini-paid', cost: 0.3 },
+        { model: 'model-free', responseModel: 'gemini-free', cost: 0 }
+      ]
+    )
+    assert.deepEqual(analysis.modelTransitions, [
+      {
+        occurredAt: '2026-06-22T16:54:00.000Z',
+        sourceModel: 'cola/model-paid',
+        targetModel: 'cola/model-free',
+        selectionEventAt: '2026-06-22T16:52:00.000Z'
+      }
+    ])
+    assert.doesNotMatch(
+      JSON.stringify({
+        usagePhases: analysis.usagePhases,
+        modelTransitions: analysis.modelTransitions
+      }),
+      /response-(?:paid|free)-private/
+    )
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
   }

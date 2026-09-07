@@ -33,6 +33,16 @@ const DEVICE_ID_RE =
 const VERSION_RE = /Version:\s*([^\n]+)/i
 const PLATFORM_RE = /Platform:\s*([^\n]+)/i
 const FILE_COUNT_RE = /(?:\*\*)?File count:(?:\*\*)?\s*(\d+)/i
+const SENTRY_ISSUE_TITLE_RE = /^\[sentry\](?:\s|$)/i
+const SENTRY_SUBDOMAIN_ISSUE_URL_RE =
+  /https:\/\/([a-z0-9-]+)\.sentry\.io\/issues\/(\d+)(?:[/?#]|$)/i
+const SENTRY_ORG_ISSUE_URL_RE =
+  /https:\/\/sentry\.io\/organizations\/([a-z0-9-]+)\/issues\/(\d+)(?:[/?#]|$)/i
+const SENTRY_SHORT_ID_MARKER_RE = /<!--\s*cola-sentry:v1\s+short-id=([a-z0-9-]+)/i
+const SENTRY_SHORT_ID_SOURCE_RE = /来源：?\s*Sentry\s+`([a-z0-9-]+)`/i
+const SENTRY_SHORT_ID_TABLE_RE = /\|\s*Short ID\s*\|\s*`?([a-z0-9-]+)`?\s*\|/i
+const SENTRY_EVENT_ID_RE = /Event ID[^\n：:]*[：:]\s*`?([0-9a-f]{32})`?/i
+const SENTRY_PROJECT_RE = /\|\s*Project\s*\|\s*`?([a-z0-9-]+)\/([a-z0-9_-]+)`?\s*\|/i
 
 const EMAIL_REDACTION_RE = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi
 const TOKEN_REDACTION_RE =
@@ -320,6 +330,23 @@ export function parseFeedbackIssue(issue) {
     platform: extractOne(PLATFORM_RE, body),
     attachments: discovery.attachments,
     expectedFileCount: discovery.expectedFileCount
+  }
+}
+
+export function parseSentryIssueSource(issue) {
+  if (!SENTRY_ISSUE_TITLE_RE.test(issue?.title || '')) return null
+  const body = issue?.body || ''
+  const issueUrl = SENTRY_SUBDOMAIN_ISSUE_URL_RE.exec(body) || SENTRY_ORG_ISSUE_URL_RE.exec(body)
+  const project = SENTRY_PROJECT_RE.exec(body)
+  return {
+    organization: issueUrl?.[1] || project?.[1] || '',
+    issueId: issueUrl?.[2] || '',
+    shortId:
+      extractOne(SENTRY_SHORT_ID_MARKER_RE, body) ||
+      extractOne(SENTRY_SHORT_ID_SOURCE_RE, body) ||
+      extractOne(SENTRY_SHORT_ID_TABLE_RE, body),
+    eventId: extractOne(SENTRY_EVENT_ID_RE, body).toLowerCase(),
+    project: project?.[2] || ''
   }
 }
 
@@ -788,6 +815,16 @@ async function fetchSentryEventDetail(org, project, eventId, token) {
   return (await sentryApiGet(url, token)).data
 }
 
+async function fetchSentryGroup(issueId, token) {
+  const url = `https://sentry.io/api/0/issues/${encodeURIComponent(issueId)}/`
+  return (await sentryApiGet(url, token)).data
+}
+
+async function resolveSentryShortId(org, shortId, token) {
+  const url = `https://sentry.io/api/0/organizations/${encodeURIComponent(org)}/shortids/${encodeURIComponent(shortId)}/`
+  return (await sentryApiGet(url, token)).data
+}
+
 function eventTag(event, key) {
   return (event?.tags || []).find((tag) => tag.key === key)?.value || ''
 }
@@ -1062,8 +1099,125 @@ async function collectSentryCandidates({
   }
 }
 
-export function shouldCollectSentry(logAnalysis = {}) {
-  return (logAnalysis.errorBlocks || []).some((block) => block.source === 'explicit-error')
+async function collectSourceSentryEvidence({ org, project, environment, source, token }) {
+  if (source.organization && source.organization !== org) {
+    throw new Error(
+      `Sentry 来源组织与配置不一致：${source.organization} != ${org}。拒绝跨组织查询。`
+    )
+  }
+  if (!source.issueId && !source.shortId && !source.eventId) {
+    throw new Error('[sentry] Issue 正文未提供可验证的 Sentry Issue URL、Short ID 或 Event ID。')
+  }
+
+  let group = source.issueId ? await fetchSentryGroup(source.issueId, token) : null
+  if (!group && source.shortId) {
+    const resolved = await resolveSentryShortId(org, source.shortId, token)
+    group = resolved?.group || null
+  }
+  if (source.project && group?.project?.slug && source.project !== group.project.slug) {
+    throw new Error(
+      `Sentry 来源 Project 与 group 不一致：${source.project} != ${group.project.slug}。`
+    )
+  }
+  let resolvedProject = source.project || group?.project?.slug || project
+  let eventDetail = null
+  if (source.eventId) {
+    eventDetail = await fetchSentryEventDetail(org, resolvedProject, source.eventId, token)
+    if (!group && eventDetail?.groupID) group = await fetchSentryGroup(eventDetail.groupID, token)
+  }
+  if (!group?.id) throw new Error('无法把 [sentry] Issue 正文中的来源解析为 Sentry group。')
+  resolvedProject = source.project || group.project?.slug || resolvedProject
+  if (source.issueId && String(group.id) !== source.issueId) {
+    throw new Error(`Sentry Issue URL 指向 ${source.issueId}，但来源解析为 ${group.id}。`)
+  }
+  if (
+    source.shortId &&
+    group.shortId &&
+    group.shortId.toUpperCase() !== source.shortId.toUpperCase()
+  ) {
+    throw new Error(`Sentry Short ID 指向 ${source.shortId}，但来源解析为 ${group.shortId}。`)
+  }
+  if (eventDetail?.groupID && String(eventDetail.groupID) !== String(group.id)) {
+    throw new Error(`Sentry Event ${source.eventId} 不属于来源 group ${group.id}。`)
+  }
+
+  const errors = []
+  let events = eventDetail
+    ? [eventDetail]
+    : await fetchSentryIssueEvents(org, group.id, token, null)
+  events = events.slice(0, MAX_SENTRY_EVENT_SAMPLES)
+  if (!eventDetail && events[0]) {
+    const firstEventId = events[0].eventID || events[0].id
+    if (firstEventId) {
+      try {
+        eventDetail = await fetchSentryEventDetail(org, resolvedProject, firstEventId, token)
+      } catch (error) {
+        errors.push({
+          reason: `event-detail:${group.id}`,
+          error: shortenText(redactSensitiveText(error.message), 500)
+        })
+      }
+    }
+  }
+  const eventSamples = events.map((event, index) =>
+    sanitizeEvent(event, {}, index === 0 ? eventDetail : null)
+  )
+  const releases = [...new Set(eventSamples.map((event) => event.release).filter(Boolean))]
+  const sourceReasons = [
+    source.issueId && 'source-issue-url',
+    source.shortId && 'source-short-id',
+    source.eventId && 'source-event-id'
+  ].filter(Boolean)
+
+  return {
+    skipped: false,
+    skipReason: '',
+    source: {
+      kind: 'github-sentry-issue',
+      exact: true,
+      issueId: String(group.id),
+      shortId: group.shortId || source.shortId,
+      eventIdPresent: Boolean(source.eventId)
+    },
+    project: resolvedProject,
+    environment: eventSamples[0]?.environment || environment,
+    releases,
+    timeWindow: null,
+    retrievalComplete: errors.length === 0,
+    candidateCount: 1,
+    eventCheckedCandidateCount: 1,
+    candidateQueries: [
+      {
+        reason: sourceReasons.join('+'),
+        privateFilters: [],
+        returned: 1,
+        succeeded: true
+      }
+    ],
+    candidates: [
+      {
+        issueId: String(group.id),
+        shortId: group.shortId || source.shortId,
+        title: redactSensitiveText(group.title || eventSamples[0]?.title || ''),
+        status: group.status || '',
+        level: group.level || '',
+        firstSeen: group.firstSeen || '',
+        lastSeen: group.lastSeen || '',
+        sourceReasons,
+        eventCountInWindow: null,
+        eventSamples,
+        url: `https://${org}.sentry.io/issues/${group.id}`
+      }
+    ],
+    errors
+  }
+}
+
+export function shouldCollectSentry(logAnalysis = {}, sentrySource = null) {
+  return (
+    Boolean(sentrySource) ||
+    (logAnalysis.errorBlocks || []).some((block) => block.source === 'explicit-error')
+  )
 }
 
 export function buildSkippedSentryEvidence({ project, environment, releases }) {
@@ -1097,6 +1251,9 @@ function mergeLogAnalyses(analyses, feedback) {
       errorTime: null,
       correlations: [],
       supplementalEvidence: [],
+      usagePhases: [],
+      modelTransitions: [],
+      turnLifecycles: [],
       status: '未发现可分析的 zip 日志附件。'
     }
   }
@@ -1152,6 +1309,24 @@ function mergeLogAnalyses(analyses, feedback) {
         ...item
       }))
     ),
+    usagePhases: analyses.flatMap((analysis, index) =>
+      (analysis.usagePhases || []).map((phase) => ({
+        bundle: analysis.attachmentIndex || index + 1,
+        ...phase
+      }))
+    ),
+    modelTransitions: analyses.flatMap((analysis, index) =>
+      (analysis.modelTransitions || []).map((transition) => ({
+        bundle: analysis.attachmentIndex || index + 1,
+        ...transition
+      }))
+    ),
+    turnLifecycles: analyses.flatMap((analysis, index) =>
+      (analysis.turnLifecycles || []).map((turn) => ({
+        bundle: analysis.attachmentIndex || index + 1,
+        ...turn
+      }))
+    ),
     status: analyses
       .map((analysis, index) => `附件 ${analysis.attachmentIndex || index + 1}: ${analysis.status}`)
       .join(' ')
@@ -1178,6 +1353,12 @@ function safeLogAnalysis(analysis) {
     errorPhrases: (analysis.errorPhrases || []).map(redactSensitiveText),
     correlations: analysis.correlations || [],
     supplementalEvidence: analysis.supplementalEvidence || [],
+    usagePhases: analysis.usagePhases || [],
+    modelTransitions: analysis.modelTransitions || [],
+    turnLifecycles: (analysis.turnLifecycles || []).map((turn) => ({
+      ...turn,
+      promptText: redactSensitiveText(turn.promptText)
+    })),
     status: redactSensitiveText(analysis.status)
   }
 }
@@ -1196,16 +1377,19 @@ export function assessEvidenceScope({
   const hasErrorPhrase = (logAnalysis.errorPhrases || []).length > 0
   const hasIdentity = Boolean(feedback.deviceId || feedback.device || feedback.userId)
   const hasRelease = (sentry.releases || []).length > 0
+  const hasDirectSentrySource = sentry.source?.exact === true
   const anchorReasons = [
     hasValidatedAttachment && 'validated-attachment',
     hasSelectedLog && 'selected-log',
     hasErrorTime && 'error-time',
     hasErrorPhrase && 'error-phrase',
     hasIdentity && 'identity',
-    hasRelease && 'release'
+    hasRelease && 'release',
+    hasDirectSentrySource && 'direct-sentry-source'
   ].filter(Boolean)
   const anchorQuality =
-    hasSelectedLog && (hasErrorTime || hasErrorPhrase || hasIdentity || hasRelease)
+    hasDirectSentrySource ||
+    (hasSelectedLog && (hasErrorTime || hasErrorPhrase || hasIdentity || hasRelease))
       ? 'strong'
       : anchorReasons.length > 0
         ? 'partial'
@@ -1233,9 +1417,10 @@ function buildEvidence({
   const evidenceScope = assessEvidenceScope({ feedback, downloads, logAnalysis, sentry })
   return {
     contract: {
-      version: 8,
+      version: 11,
       sentryCandidatesRequireLlmValidation: true,
-      sentryRequiresLogErrorAnchor: true,
+      genericSentryCandidatesRequireLogErrorAnchor: true,
+      sourceSentryIssueCanAnchorRetrieval: true,
       sentryReproductionAndRetrievalStatusSeparated: true,
       fixedReportStructureRequired: true,
       suggestedTitleRequired: true,
@@ -1244,8 +1429,12 @@ function buildEvidence({
       incidentNarrativeTimeRequiresAgentValidation: true,
       preFailureBaselineRequired: true,
       modelTransitionCheckRequired: true,
+      perInteractionModelRequired: true,
+      modelSwitchBeforeAfterRequired: true,
+      usageSourcesMergedRequired: true,
       billingTimelineRequiredWhenRelevant: true,
-      mermaidUsageTimelineRequired: true,
+      pricingClassificationMustPrecedeQuotaCascade: true,
+      tabularUsageTimelineRequired: true,
       collapsedDetailedTimelineRequired: true,
       impactPriorityScale: ['P0', 'P1', 'P2'],
       confidenceAndPriorityLeadRequired: true,
@@ -1253,10 +1442,9 @@ function buildEvidence({
         '一句话结论',
         '建议标题',
         '用户故事：如果我是这个用户',
-        '用户说法与系统事实的桥',
+        '用户说法与表现',
         '用户操作与消耗时间轴',
-        '真实对话与详细时间线',
-        '故障层与代码逻辑'
+        '真实对话与详细时间线'
       ]
     },
     issue: buildIssueEvidence(issue, repo),
@@ -1366,6 +1554,7 @@ async function main() {
   const issue = await fetchIssueByNumber(target.repo, target.issueNumber)
   timing.fetchIssueMs = Date.now() - mark
   const feedback = parseFeedbackIssue(issue)
+  const sentrySource = parseSentryIssueSource(issue)
   const issueDir = path.join(path.resolve(args.downloadDir), String(issue.number))
   ensureDir(issueDir)
 
@@ -1430,25 +1619,36 @@ async function main() {
     projectOverride: args.projectOverride
   })
   const sentryEnvironment = args.environmentOverride ? args.environment : sentryTarget.environment
-  const sentry = shouldCollectSentry(logAnalysis)
-    ? await collectSentryCandidates({
+  const sentryToken = shouldCollectSentry(logAnalysis, sentrySource)
+    ? await checkSentryDependencies()
+    : null
+  const sentry = sentrySource
+    ? await collectSourceSentryEvidence({
         org: args.org,
         project: sentryTarget.project,
         environment: sentryEnvironment,
-        deviceId: feedback.deviceId || feedback.device,
-        userId: feedback.userId,
-        releases: sentryTarget.releases,
-        errorPhrases: logAnalysis.errorPhrases,
-        mappedErrors,
-        createdAt: feedback.createdAt,
-        errorTime: logAnalysis.errorTime,
-        token: await checkSentryDependencies()
+        source: sentrySource,
+        token: sentryToken
       })
-    : buildSkippedSentryEvidence({
-        project: sentryTarget.project,
-        environment: sentryEnvironment,
-        releases: sentryTarget.releases
-      })
+    : shouldCollectSentry(logAnalysis)
+      ? await collectSentryCandidates({
+          org: args.org,
+          project: sentryTarget.project,
+          environment: sentryEnvironment,
+          deviceId: feedback.deviceId || feedback.device,
+          userId: feedback.userId,
+          releases: sentryTarget.releases,
+          errorPhrases: logAnalysis.errorPhrases,
+          mappedErrors,
+          createdAt: feedback.createdAt,
+          errorTime: logAnalysis.errorTime,
+          token: sentryToken
+        })
+      : buildSkippedSentryEvidence({
+          project: sentryTarget.project,
+          environment: sentryEnvironment,
+          releases: sentryTarget.releases
+        })
   timing.sentryMs = Date.now() - mark
   timing.totalMs = Date.now() - startedAt
 

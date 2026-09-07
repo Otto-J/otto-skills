@@ -16,6 +16,8 @@ const MAX_BLOCK_LINES = 18
 const MAX_LOG_LINE_CHARS = 700
 const DEFAULT_MAX_BLOCKS = 12
 const MAX_SUPPLEMENTAL_EVIDENCE = 100
+const MAX_USAGE_PHASES = 100
+const MAX_TURN_LIFECYCLES = 100
 const FULL_SUPPLEMENTAL_SCAN_BYTES = 8 * 1024 * 1024
 const ASIA_SHANGHAI_OFFSET_MS = 8 * 60 * 60 * 1000
 
@@ -537,6 +539,319 @@ function readSupplementalLines(filePath) {
     : { lines: recentTextLines(filePath), scanMode: 'tail' }
 }
 
+function objectValue(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : null
+}
+
+function nonNegativeNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
+}
+
+function safeRuntimeLabel(value) {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim()
+  return /^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,119}$/.test(normalized) ? normalized : null
+}
+
+function timestampIso(value) {
+  if (value === null || value === undefined || value === '') return null
+  const timestamp = parseEpochTimestamp(value) ?? parseSupplementalStringTimestamp(value)
+  return timestamp === null ? null : new Date(timestamp).toISOString()
+}
+
+function assistantUsagePhase(message, fallback, source) {
+  const record = objectValue(message)
+  if (record?.role !== 'assistant') return null
+  const usage = objectValue(record.usage)
+  const cost = objectValue(usage?.cost)
+  const toolCallCount = Array.isArray(record.content)
+    ? record.content.filter((block) => objectValue(block)?.type === 'toolCall').length
+    : 0
+  const provider = safeRuntimeLabel(record.provider)
+  const model = safeRuntimeLabel(record.model)
+  const responseModel = safeRuntimeLabel(record.responseModel)
+  const inputTokens = nonNegativeNumber(usage?.input ?? usage?.inputTokens)
+  const outputTokens = nonNegativeNumber(usage?.output ?? usage?.outputTokens)
+  const cacheReadTokens = nonNegativeNumber(usage?.cacheRead ?? usage?.cacheReadTokens)
+  const cacheWriteTokens = nonNegativeNumber(usage?.cacheWrite ?? usage?.cacheWriteTokens)
+  const runtimeCost = nonNegativeNumber(cost?.total ?? usage?.costUsd ?? usage?.estimatedCostUsd)
+  if (
+    !provider &&
+    !model &&
+    !usage &&
+    toolCallCount === 0 &&
+    !safeRuntimeLabel(record.stopReason)
+  ) {
+    return null
+  }
+  const startedAt = timestampIso(record.startTime ?? fallback.startTime ?? fallback.ts)
+  const endedAt = timestampIso(
+    record.endTime ?? record.timestamp ?? fallback.endTime ?? fallback.ts
+  )
+  const responseId = typeof record.responseId === 'string' ? record.responseId : ''
+  const dedupeKey = fingerprint(
+    responseId ||
+      JSON.stringify([
+        provider,
+        model,
+        responseModel,
+        startedAt,
+        endedAt,
+        inputTokens,
+        outputTokens,
+        cacheReadTokens,
+        cacheWriteTokens,
+        runtimeCost,
+        record.stopReason
+      ])
+  )
+  return {
+    sourceKind: source.kind,
+    sourceRef: source.ref,
+    selectedBy: source.selectedBy,
+    startedAt,
+    endedAt,
+    provider,
+    model,
+    responseModel,
+    toolCallCount,
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
+    cost: runtimeCost,
+    stopReason: safeRuntimeLabel(record.stopReason),
+    dedupeKey
+  }
+}
+
+function usagePhasesFromFile(filePath, source) {
+  const records = []
+  for (const line of readSupplementalLines(filePath).lines) {
+    try {
+      const parsed = JSON.parse(line)
+      if (objectValue(parsed)) records.push(parsed)
+    } catch {
+      // Supplemental files may mix JSON with plain-text diagnostics.
+    }
+  }
+
+  const phases = []
+  let sourceSequence = 0
+  for (const record of records) {
+    if (source.kind === 'trace' && record.type === 'full_run') {
+      for (const message of Array.isArray(record.messages) ? record.messages : []) {
+        const phase = assistantUsagePhase(message, record, source)
+        if (phase) phases.push({ ...phase, sourceSequence: sourceSequence++ })
+      }
+    } else if (source.kind === 'session' && record.type === 'message') {
+      const phase = assistantUsagePhase(record.message, record, source)
+      if (phase) phases.push({ ...phase, sourceSequence: sourceSequence++ })
+    }
+  }
+  return phases
+}
+
+function collectUsagePhases(root, groups, supplementalEvidence) {
+  const selected = new Map(
+    supplementalEvidence
+      .filter((item) => item.kind === 'trace' || item.kind === 'session')
+      .map((item) => [item.ref, item])
+  )
+  const phasesForKind = (kind, files) =>
+    files.flatMap((filePath) => {
+      const ref = evidenceRef(kind, root, filePath)
+      const evidence = selected.get(ref)
+      return evidence ? usagePhasesFromFile(filePath, evidence) : []
+    })
+
+  const selectionRank = { correlation: 3, 'time-window': 2, 'failure-signal': 1 }
+  const phases = [
+    ...phasesForKind('trace', groups.traces),
+    ...phasesForKind('session', groups.sessions)
+  ]
+  const deduplicated = new Map()
+  for (const phase of phases) {
+    const existing = deduplicated.get(phase.dedupeKey)
+    const existingRank = selectionRank[existing?.selectedBy] || 0
+    const phaseRank = selectionRank[phase.selectedBy] || 0
+    if (!existing || phaseRank > existingRank) deduplicated.set(phase.dedupeKey, phase)
+  }
+
+  return [...deduplicated.values()]
+    .toSorted((left, right) => {
+      if (left.sourceRef === right.sourceRef) return left.sourceSequence - right.sourceSequence
+      return String(left.startedAt ?? left.endedAt ?? '').localeCompare(
+        String(right.startedAt ?? right.endedAt ?? '')
+      )
+    })
+    .slice(-MAX_USAGE_PHASES)
+    .map(({ sourceSequence: _sourceSequence, dedupeKey: _dedupeKey, ...phase }, index) => ({
+      phase: index + 1,
+      ...phase
+    }))
+}
+
+function collectModelTransitions(lines) {
+  const transitions = []
+  let latestSelectionEventAt = null
+
+  for (const line of lines) {
+    const timestamp = parseLogTimestamp(line, { utc: true })
+    if (/method=model\.setTier\b/.test(line) && /(?:→ request|request\s+method=)/.test(line)) {
+      latestSelectionEventAt = timestamp
+      continue
+    }
+
+    const match = line.match(
+      /\[model-switch\] same-session\b.*?\bsource=([A-Za-z0-9._:/+-]+).*?\btarget=([A-Za-z0-9._:/+-]+)/
+    )
+    if (!match) continue
+
+    const occurredAt = timestamp
+    const selectionMs = new Date(latestSelectionEventAt || '').getTime()
+    const transitionMs = new Date(occurredAt || '').getTime()
+    const selectionEventAt =
+      !Number.isNaN(selectionMs) &&
+      !Number.isNaN(transitionMs) &&
+      transitionMs >= selectionMs &&
+      transitionMs - selectionMs <= 10 * 60 * 1000
+        ? latestSelectionEventAt
+        : null
+    transitions.push({
+      occurredAt,
+      sourceModel: safeRuntimeLabel(match[1]),
+      targetModel: safeRuntimeLabel(match[2]),
+      selectionEventAt
+    })
+    latestSelectionEventAt = null
+  }
+
+  return transitions
+}
+
+function parsePromptText(value) {
+  const normalized = String(value || '').trim()
+  if (!normalized.startsWith('"')) return normalized.slice(0, 500)
+  try {
+    const parsed = JSON.parse(normalized)
+    return typeof parsed === 'string' ? parsed.slice(0, 500) : normalized.slice(0, 500)
+  } catch {
+    return normalized.slice(1, 501)
+  }
+}
+
+function collectTurnLifecycles(lines) {
+  const turns = []
+  const byPromptId = new Map()
+  const activeByScope = new Map()
+
+  const activeTurn = (scope) => {
+    const turn = activeByScope.get(scope)
+    return turn && !turn.terminalAt ? turn : null
+  }
+  const latestUnboundTurn = () =>
+    [...turns].reverse().find((turn) => !turn.promptId && !turn.terminalAt) || null
+  const bindPromptId = (turn, promptId) => {
+    if (!turn || !promptId) return
+    turn.promptId = promptId
+    byPromptId.set(promptId, turn)
+  }
+  const finishTurn = (turn, terminalAt, outcome) => {
+    if (!turn || !terminalAt) return
+    turn.terminalAt = terminalAt
+    turn.outcome = outcome
+    const startedMs = new Date(turn.startedAt || '').getTime()
+    const terminalMs = new Date(terminalAt).getTime()
+    turn.durationMs =
+      Number.isNaN(startedMs) || Number.isNaN(terminalMs) ? null : terminalMs - startedMs
+    if (activeByScope.get(turn.scope) === turn) activeByScope.delete(turn.scope)
+  }
+
+  for (const line of lines) {
+    const timestamp = parseLogTimestamp(line, { utc: true })
+    if (!timestamp) continue
+
+    const promptStart = line.match(
+      /\[agent\] prompt start scope=([^\s]+) busy=(true|false) text=(.*)$/
+    )
+    if (promptStart) {
+      const turn = {
+        scope: safeRuntimeLabel(promptStart[1]),
+        startedAt: timestamp,
+        busy: promptStart[2] === 'true',
+        promptText: parsePromptText(promptStart[3]),
+        promptId: null,
+        provider: null,
+        model: null,
+        modelCallStartedAt: null,
+        abortRequestedAt: null,
+        abortSource: null,
+        terminalAt: null,
+        outcome: 'running',
+        durationMs: null
+      }
+      turns.push(turn)
+      activeByScope.set(turn.scope, turn)
+      continue
+    }
+
+    const sessionReady = line.match(
+      /\[agent\] session ready promptId=([^\s]+).*?provider=([^\s]+) model=([^\s]+)/
+    )
+    if (sessionReady) {
+      const turn = byPromptId.get(sessionReady[1]) || latestUnboundTurn()
+      bindPromptId(turn, sessionReady[1])
+      if (turn) {
+        turn.provider = safeRuntimeLabel(sessionReady[2])
+        turn.model = safeRuntimeLabel(sessionReady[3])
+      }
+      continue
+    }
+
+    const modelCall = line.match(/\[agent\] session\.prompt\(\) firing promptId=([^\s]+)/)
+    if (modelCall) {
+      const turn = byPromptId.get(modelCall[1]) || latestUnboundTurn()
+      bindPromptId(turn, modelCall[1])
+      if (turn) turn.modelCallStartedAt = timestamp
+      continue
+    }
+
+    const ipcAbort = line.match(/\[ipc\] agent:abort scope=([^\s]+)/)
+    if (ipcAbort) {
+      const turn = activeTurn(safeRuntimeLabel(ipcAbort[1]))
+      if (turn) {
+        turn.abortRequestedAt = timestamp
+        turn.abortSource = 'desktop-ipc'
+      }
+      continue
+    }
+
+    const stopped = line.match(/\[agent\] message-stopped promptId=([^\s]+)/)
+    if (stopped) {
+      finishTurn(byPromptId.get(stopped[1]), timestamp, 'aborted')
+      continue
+    }
+
+    const failed = line.match(/\[sink\] error\b.*?promptId=([^\s]+)/)
+    if (failed) {
+      finishTurn(byPromptId.get(failed[1]), timestamp, 'error')
+      continue
+    }
+
+    const resolved = line.match(/\[agent\] session\.prompt\(\) resolved promptId=([^\s]+)/)
+    if (resolved) {
+      const turn = byPromptId.get(resolved[1])
+      if (turn && !turn.terminalAt) finishTurn(turn, timestamp, 'resolved')
+    }
+  }
+
+  return turns.slice(-MAX_TURN_LIFECYCLES).map(({ promptId, ...turn }) => ({
+    ...turn,
+    promptFingerprint: promptId ? fingerprint(promptId) : null
+  }))
+}
+
 function collectSupplementalEvidence(root, groups, correlations, feedbackTime) {
   const candidates = [
     ...groups.traces.map((filePath) => ({ kind: 'trace', filePath })),
@@ -652,6 +967,9 @@ function emptyAnalysis(message) {
     },
     correlations: [],
     supplementalEvidence: [],
+    usagePhases: [],
+    modelTransitions: [],
+    turnLifecycles: [],
     errorBlocks: [],
     rawErrorLog: '',
     userPath: '日志里暂时只看到错误结果，用户操作路径需要继续补读 prompt 和 session。',
@@ -739,6 +1057,9 @@ export async function analyzeFeedbackBundle({
     privateCorrelations,
     feedback.createdAt
   )
+  const usagePhases = collectUsagePhases(root, inventory.groups, supplementalEvidence)
+  const modelTransitions = collectModelTransitions(allSelectedLines)
+  const turnLifecycles = collectTurnLifecycles(allSelectedLines)
   const rawErrorLog = errorBlocks.map((block) => block.lines.join('\n')).join('\n\n')
   const firstSelected = selectedLogs[0]
 
@@ -764,6 +1085,9 @@ export async function analyzeFeedbackBundle({
       fingerprint: value
     })),
     supplementalEvidence,
+    usagePhases,
+    modelTransitions,
+    turnLifecycles,
     errorBlocks,
     rawErrorLog,
     userPath: collectUserPath(primaryData.lines, primaryError?.index ?? null),
