@@ -6,6 +6,7 @@ import { resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { probe } from "./view.mjs";
+import { buildCaptions } from "./captions.mjs";
 const exec = promisify(execFile),
   json = async (p) => JSON.parse(await readFile(p, "utf8"));
 const ff = (args) =>
@@ -229,23 +230,7 @@ export async function render({
     "+faststart",
     audio,
   ]);
-  const captions = [];
-  for (const g of entries) {
-    const phrases = g.text.match(/[^。！？；]+[。！？；]?|[。！？；]/g) || [
-      g.text,
-    ];
-    let offset = 0;
-    const length = phrases.join("").length;
-    for (const text of phrases) {
-      const startMs = g.actualStartMs + (g.durationMs * offset) / length;
-      offset += text.length;
-      captions.push({
-        text,
-        startMs,
-        endMs: g.actualStartMs + (g.durationMs * offset) / length,
-      });
-    }
-  }
+  const captions = buildCaptions(entries);
   const zhSrt = join(output, "中文字幕.srt"),
     enSrt = join(output, "英文字幕.srt");
   await writeFile(zhSrt, srt(captions));

@@ -6,6 +6,16 @@ const voices = document.querySelector("#voices"),
 let switching = false,
   serial = 0,
   chosen = "zh";
+// Timestamp links make it possible to revisit a reported subtitle defect.
+video.addEventListener(
+  "loadedmetadata",
+  () => {
+    const t = Number(new URLSearchParams(location.search).get("t"));
+    if (Number.isFinite(t) && t > 0 && t < video.duration)
+      video.currentTime = t;
+  },
+  { once: true },
+);
 const error = (e) => {
   video.pause();
   audio.pause();
