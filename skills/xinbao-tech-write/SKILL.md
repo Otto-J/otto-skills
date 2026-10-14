@@ -1,6 +1,6 @@
 ---
 name: xinbao-tech-write
-description: "Write or plan concise, story-led Xinbao-style technical articles from hands-on exploration, API trials, product experiments, source-code inspection, or engineering prototypes. Use when the user asks to write, outline, brainstorm, polish, structure, or illustrate a serious technical article/blog/post about a technology, website, API, tool, product capability, or implementation experience. Default style: observer-style preface, one illustration before the body when useful, human story first, solution second, architecture third, technical details last, lists over tables, concise direct expression, and restrained Xiaohei-style illustrations."
+description: "Write or plan concise, story-led Xinbao-style technical articles and compact team engineering notes from hands-on exploration, API trials, product experiments, source-code inspection, or engineering prototypes. Use when the user asks to write, outline, brainstorm, polish, structure, or illustrate a serious technical article/blog/post, or turn an engineering or product observation into a team discussion draft. Default style: human story first, solution second, architecture third, technical details last, short paragraphs, lists over tables, and restrained Xiaohei-style illustrations when useful."
 ---
 
 # Xinbao Tech Write
@@ -9,7 +9,7 @@ description: "Write or plan concise, story-led Xinbao-style technical articles f
 
 Write technical articles as a readable field note, then add only the technical detail needed for readers who want to reproduce the work.
 
-Default rhythm:
+Default rhythm for full articles (use the compact mode below for short team notes):
 
 1. **Preface**: A short observer-style opening that states what this article describes and who should read it.
 2. **Lead illustration**: Place one Xiaohei-style illustration slot before the body when the article has a clear cognitive anchor.
@@ -28,7 +28,7 @@ Default reader: a technical peer, product builder, or future self who wants the 
 ## Writing Taste
 
 - Start like a person explaining what happened.
-- The first paragraph is an observer-style preface: 2-3 sentences covering the scenario, what this piece describes, and who should read it. Write it fresh each time — never a fill-in template. Avoid formulaic openers like "本文描述了…" or "在…的背景下".
+- For a full article, the first paragraph is an observer-style preface: 2-3 sentences covering the scenario, what this piece describes, and who should read it. Write it fresh each time — never a fill-in template. Avoid formulaic openers like "本文描述了…" or "在…的背景下".
 - Put the first illustration slot after the preface and before the body when the article has a clear visual metaphor.
 - Use short paragraphs and lists.
 - Use tables only when the user asks for a table, or when rows and columns are the clearest representation of data.
@@ -42,7 +42,31 @@ Default reader: a technical peer, product builder, or future self who wants the 
 - Use lists for phases, observations, risks, decisions, and next steps.
 - Use code excerpts sparingly; each snippet needs a short reason before it appears.
 
-## Standard Article Structure
+## Writing Modes
+
+The full structure below applies to articles. For a short team discussion, review note, or improvement request, use the compact mode below; omit the article preface, fixed headings, and illustration slots unless requested.
+
+## Compact Team Writing and Confirmed Voice
+
+Use this mode when Xinbao wants to turn a concrete product or engineering observation into a short message for colleagues. Keep the message to a few short paragraphs, with a small list only when it makes actions easier to follow.
+
+- Open with the concrete case and observation. A conversational first-person opening such as “我看这个问题……” can fit, but write it fresh rather than repeating a signature phrase.
+- Preserve the user's story: what they wanted, what they actually received, the mismatch, and why they raised the issue again. Retain relevant promises or earlier handling decisions. A label such as “质量未达标” needs enough concrete context to explain the complaint.
+- Explain the system and data flow after the practical problem is clear. Show where information or results entered, changed, or disappeared. Add file paths, commands, and numbers only when they support the judgment or next action.
+- State observed facts, inference, and pending decisions distinctly. Successful execution, correct billing, usable delivery, and resolution of the user's complaint each need their own evidence when relevant. Do not infer an accepted result from a successful tool call or a closed issue.
+- End with a concrete request and an observable acceptance criterion. Replace vague “建议人工复核” with the actual questions to decide; explain what a reader or user should be able to understand or do after the change.
+
+These choices also apply to article prose while preserving the article's structure. Use direct, natural Chinese and specific verbs. Keep useful conversational directness, while removing transcription fillers, typos, repeated complaints, and unsupported certainty. Match the user's layout and medium rather than turning every note into an article or a large table.
+
+### Style Samples and Task Discovery
+
+When the user asks to discover a writing task from their chats, Library, or connected apps, identify a concrete unresolved writing need before drafting. Use relevant accessible sources and the user's own prose as style evidence. User-authored explanations and follow-up messages are useful for team notes; quoted assistant output and automatically generated reports are factual references, not evidence of the user's voice. A user-designated favorite draft or template may be used as a style reference with its provenance kept clear.
+
+Briefly explain the task choice and which user-written material informed the draft. Describe two concrete style choices when asked. If the task or usable writing examples remain unclear, ask for a draft, template, or sample instead of inventing a task or claiming an unsupported style match.
+
+Use retrieved material only for the requested task. Keep unrelated personal data, customer identities, private conversations, and credentials out of drafts and persistent skill examples. Store reusable writing principles here rather than copying sensitive case records. Requests to show a draft authorize displaying it in the conversation; sending, publishing, or editing an external destination requires the user's instruction.
+
+## Full Article Structure
 
 Use this shape as the default. Section order is fixed — background, then the result, then the details in between — because it makes the piece easy to share and follow. Headings are not fixed: each section below lists the job it must do and a heading or two you can use or replace. Pick wording that fits the article; do not reuse the same headings verbatim across articles.
 
