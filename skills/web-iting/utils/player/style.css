@@ -1,0 +1,77 @@
+:root {
+  color-scheme: dark;
+  font:
+    16px/1.6 system-ui,
+    sans-serif;
+  background: #11151a;
+  color: #e9eef4;
+}
+body {
+  margin: 0;
+}
+main {
+  max-width: 1100px;
+  margin: auto;
+  padding: 32px 24px;
+}
+header span {
+  font: 12px monospace;
+  letter-spacing: 0.14em;
+  color: #7dd3c7;
+}
+h1 {
+  font-size: 27px;
+  margin: 10px 0;
+}
+p {
+  color: #a9b7c4;
+}
+video {
+  display: block;
+  width: 100%;
+  max-height: 66vh;
+  background: #000;
+  border-radius: 12px;
+}
+audio {
+  display: none;
+}
+.screen {
+  margin: 24px 0;
+}
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  padding: 20px;
+  background: #1a222b;
+  border-radius: 12px;
+}
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: #bac8d5;
+}
+select {
+  padding: 9px 12px;
+  min-width: 140px;
+  background: #111820;
+  color: #fff;
+  border: 1px solid #42505f;
+  border-radius: 6px;
+}
+#status {
+  color: #7dd3c7;
+  font-variant-numeric: tabular-nums;
+}
+.note {
+  font-size: 13px;
+  max-width: 900px;
+}
+video::cue {
+  background: #000b;
+  color: white;
+  font-size: 22px;
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Web Iting"
+  short_description: "Run the web-iting podcast processing CLI"
+  default_prompt: "Use $web-iting to process this audio or podcast source."
