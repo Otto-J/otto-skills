@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cola Issue 统一处理"
+  short_description: "查询新增反馈，结合原始会话与 Slack 任务分配和证据，调查单条或批量 Issue"
+  default_prompt: "使用 $cola-issue-batch-handle 查看或调查 Cola Issues，结合 GitHub、原始会话与 Slack 中的任务分配、补充证据和团队决定，给出下一步。"
